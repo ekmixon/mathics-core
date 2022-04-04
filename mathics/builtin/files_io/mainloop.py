@@ -48,6 +48,7 @@ class HistoryLength(Builtin):
      = %7
     """
 
+    summary_text = "number of previous lines of input and output to keep"
     name = "$HistoryLength"
 
     rules = {
@@ -86,6 +87,7 @@ class In(Builtin):
      . In[1] = x = 1
     """
 
+    summary_text = "i-esim input"
     attributes = listable | protected
 
     rules = {
@@ -97,12 +99,15 @@ class IOHookPreRead(Builtin):
     """
     <dl>
     <dt>$PreRead
-    <dt> is a global variable whose value, if set, is applied to the \
+    <dd> is a global variable whose value, if set, is applied to the \
     text or box form of every input expression before it is fed to the parser.
     <dt>(Not implemented yet)
     </dl>
     """
 
+    summary_text = (
+        "function applied to each input string before being fed to the Wolfram System"
+    )
     name = "$PreRead"
     attributes = no_attributes
 
@@ -111,7 +116,7 @@ class IOHookPre(Builtin):
     """
     <dl>
     <dt>$Pre
-    <dt>is a global variable whose value, if set,
+    <dd>is a global variable whose value, if set,
     is applied to every input expression.
     </dl>
 
@@ -135,6 +140,7 @@ class IOHookPre(Builtin):
      = 4
     """
 
+    summary_text = "function applied to each input expression before evaluation"
     name = "$Pre"
     attributes = no_attributes
 
@@ -143,11 +149,12 @@ class IOHookPost(Builtin):
     """
     <dl>
     <dt>$Post
-    <dt>is a global variable whose value, if set,
+    <dd>is a global variable whose value, if set,
     is applied to every output expression.
     </dl>
     """
 
+    summary_text = "function applied to each expression after evaluation"
     name = "$Post"
     attributes = no_attributes
 
@@ -156,11 +163,14 @@ class IOHookPrePrint(Builtin):
     """
     <dl>
     <dt>$PrePrint
-    <dt>is a global variable whose value, if set,
+    <dd>is a global variable whose value, if set,
     is applied to every output expression before it is printed.
     </dl>
     """
 
+    summary_text = (
+        "function applied after 'Out[n]' is assigned, but before the result is printed"
+    )
     name = "$PrePrint"
     attributes = no_attributes
 
@@ -169,12 +179,13 @@ class IOHookSyntaxHandler(Builtin):
     """
     <dl>
     <dt>$SyntaxHandler
-    <dt>is a global variable whose value, if set,
+    <dd>is a global variable whose value, if set,
     is applied to  any input string that is found to contain a syntax error.
-    <dt>(Not implemented yet)
+    (Not implemented yet)
     </dl>
     """
 
+    summary_text = "function applied to any input line that yields a syntax error"
     name = "$SyntaxHandler"
     attributes = no_attributes
 
@@ -198,6 +209,7 @@ class Line(Builtin):
      : Non-negative integer expected.
     """
 
+    summary_text = "current line number"
     name = "$Line"
 
 
@@ -239,6 +251,7 @@ class Out(Builtin):
      = 12
     """
 
+    summary_text = "result of the n-esim input line"
     attributes = listable | protected
 
     rules = {
