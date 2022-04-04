@@ -38,6 +38,7 @@ class Fibonacci(_MPMathFunction):
      = 280571172992510140037611932413038677189525
     """
 
+    summary_text = "Fibonacci's numbers"
     nargs = 1
     attributes = listable | numeric_function | protected | read_protected
     sympy_name = "fibonacci"
@@ -61,6 +62,7 @@ class HarmonicNumber(_MPMathFunction):
      = 0.613706
     """
 
+    summary_text = "Harmonic numbers"
     rules = {
         "HarmonicNumber[-1]": "ComplexInfinity",
     }
@@ -84,6 +86,7 @@ class StirlingS1(Builtin):
     = -608281864034267560872252163321295376887552831379210240000000000
     """
 
+    summary_text = "Stirling numbers of the first kind"
     attributes = listable | protected
 
     nargs = 2
@@ -110,6 +113,7 @@ class StirlingS2(Builtin):
     = {1, 511, 9330, 34105, 42525, 22827, 5880, 750, 45, 1}
     """
 
+    summary_text = "Stirling numbers of the second kind"
     attributes = listable | protected
 
     sympy_name = "functions.combinatorial.numbers.stirling"

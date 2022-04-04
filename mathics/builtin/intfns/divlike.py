@@ -57,6 +57,7 @@ class CoprimeQ(Builtin):
      = False
     """
 
+    summary_text = "test whether elements are coprime"
     attributes = listable | protected
 
     def apply(self, args, evaluation):
@@ -87,6 +88,7 @@ class EvenQ(Test):
      = False
     """
 
+    summary_text = "test whether elements are even numbers"
     attributes = listable | protected
 
     def test(self, n):
@@ -113,6 +115,7 @@ class GCD(Builtin):
     'GCD' does not work for rational numbers and Gaussian integers yet.
     """
 
+    summary_text = "greatest common divisor"
     attributes = flat | listable | one_identity | orderless | protected
 
     def apply(self, ns, evaluation):
@@ -141,6 +144,7 @@ class LCM(Builtin):
      = 600
     """
 
+    summary_text = "least common multiple"
     attributes = flat | listable | one_identity | orderless | protected
 
     def apply(self, ns, evaluation):
@@ -174,6 +178,7 @@ class Mod(Builtin):
      = Mod[5, 0]
     """
 
+    summary_text = "the remainder in an integer division"
     attributes = listable | numeric_function | protected
 
     def apply(self, n, m, evaluation):
@@ -199,6 +204,7 @@ class OddQ(Test):
      = False
     """
 
+    summary_text = "test whether elements are odd numbers"
     attributes = listable | protected
 
     def test(self, n):
@@ -227,6 +233,7 @@ class PowerMod(Builtin):
     'PowerMod' does not support rational coefficients (roots) yet.
     """
 
+    summary_text = "modular powers and roots"
     attributes = listable | protected
 
     messages = {
@@ -286,6 +293,7 @@ class PrimeQ(SympyFunction):
      = {False, True, True, False, True, False, True, False, False, False, True, False, True, False, False, False, True, False, True, False}
     """
 
+    summary_text = "test whether elements are prime numbers"
     attributes = listable | numeric_function | protected
 
     sympy_name = "isprime"
@@ -325,6 +333,7 @@ class Quotient(Builtin):
      = -5
     """
 
+    summary_text = "integer quotient"
     attributes = listable | numeric_function | protected
 
     messages = {
@@ -370,6 +379,7 @@ class QuotientRemainder(Builtin):
      = {2, 1.}
     """
 
+    summary_text = "integer quotient and remainder"
     attributes = listable | numeric_function | protected
 
     messages = {
