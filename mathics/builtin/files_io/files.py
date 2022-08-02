@@ -425,11 +425,7 @@ class Read(Builtin):
             return
 
         # Wrap types in a list (if it isn't already one)
-        if types.has_form("List", None):
-            types = types._elements
-        else:
-            types = (types,)
-
+        types = types._elements if types.has_form("List", None) else (types, )
         # TODO: look for a better implementation handling "Hold[Expression]".
         #
         types = (
@@ -557,10 +553,7 @@ class Read(Builtin):
 
         if isinstance(result, Symbol):
             return result
-        if len(result) == 1:
-            return from_python(*result)
-
-        return from_python(result)
+        return from_python(*result) if len(result) == 1 else from_python(result)
 
     def apply_nostream(self, arg1, arg2, evaluation):
         "Read[arg1_, arg2_]"
@@ -645,19 +638,19 @@ class _BinaryFormat(object):
 
     @classmethod
     def get_readers(cls):
-        readers = {}
-        for funcname in dir(cls):
-            if funcname.startswith("_") and funcname.endswith("_reader"):
-                readers[funcname[1:-7]] = getattr(cls, funcname)
-        return readers
+        return {
+            funcname[1:-7]: getattr(cls, funcname)
+            for funcname in dir(cls)
+            if funcname.startswith("_") and funcname.endswith("_reader")
+        }
 
     @classmethod
     def get_writers(cls):
-        writers = {}
-        for funcname in dir(cls):
-            if funcname.startswith("_") and funcname.endswith("_writer"):
-                writers[funcname[1:-7]] = getattr(cls, funcname)
-        return writers
+        return {
+            funcname[1:-7]: getattr(cls, funcname)
+            for funcname in dir(cls)
+            if funcname.startswith("_") and funcname.endswith("_writer")
+        }
 
     # Reader Functions
 
@@ -1203,22 +1196,14 @@ class BinaryWrite(Builtin):
             return expr
 
         # Check b
-        if b.has_form("List", None):
-            pyb = b.leaves
-        else:
-            pyb = [b]
-
+        pyb = b.leaves if b.has_form("List", None) else [b]
         # Check Type
-        if typ.has_form("List", None):
-            types = typ.get_elements()
-        else:
-            types = [typ]
-
+        types = typ.get_elements() if typ.has_form("List", None) else [typ]
         if len(types) == 0:  # Default type is "Bytes"
             types = [String("Byte")]
 
         types = [t.get_string_value() for t in types]
-        if not all(t in self.writers for t in types):
+        if any(t not in self.writers for t in types):
             evaluation.message("BinaryRead", "format", typ)
             return expr
 
@@ -1567,13 +1552,9 @@ class BinaryRead(Builtin):
             evaluation.message("BinaryRead", "bfmt", channel)
             return expr
 
-        if typ.has_form("List", None):
-            types = typ.get_elements()
-        else:
-            types = [typ]
-
+        types = typ.get_elements() if typ.has_form("List", None) else [typ]
         types = [t.get_string_value() for t in types]
-        if not all(t in self.readers for t in types):
+        if any(t not in self.readers for t in types):
             evaluation.message("BinaryRead", "format", typ)
             return expr
 
@@ -1587,9 +1568,8 @@ class BinaryRead(Builtin):
 
         if typ.has_form("List", None):
             return Expression("List", *result)
-        else:
-            if len(result) == 1:
-                return result[0]
+        if len(result) == 1:
+            return result[0]
 
 
 class WriteString(Builtin):
@@ -1718,9 +1698,10 @@ class _OpenAction(Builtin):
         # Options
         # BinaryFormat
         mode = self.mode
-        if options["System`BinaryFormat"].is_true():
-            if not self.mode.endswith("b"):
-                mode += "b"
+        if options["System`BinaryFormat"].is_true() and not self.mode.endswith(
+            "b"
+        ):
+            mode += "b"
 
         if not (isinstance(path, String) and len(path.to_python()) > 2):
             evaluation.message(self.__class__.__name__, "fstr", path)
@@ -2230,7 +2211,7 @@ class ReadList(Read):
             return
 
         result = []
-        for i in range(py_m):
+        for _ in range(py_m):
             tmp = super(ReadList, self).apply(channel, types, evaluation, options)
 
             if tmp is SymbolFailed:
@@ -2462,7 +2443,7 @@ class SetStreamPosition(Builtin):
             raise NotImplementedError
 
         seekpos = m.to_python()
-        if not (isinstance(seekpos, int) or seekpos == float("inf")):
+        if not isinstance(seekpos, int) and seekpos != float("inf"):
             evaluation.message(
                 "SetStreamPosition", "stmrng", Expression("InputStream", name, n), m
             )
@@ -2471,11 +2452,10 @@ class SetStreamPosition(Builtin):
         try:
             if seekpos == float("inf"):
                 stream.io.seek(0, 2)
+            elif seekpos < 0:
+                stream.io.seek(seekpos, 2)
             else:
-                if seekpos < 0:
-                    stream.io.seek(seekpos, 2)
-                else:
-                    stream.io.seek(seekpos)
+                stream.io.seek(seekpos)
         except IOError:
             evaluation.message("SetStreamPosition", "seek")
 
@@ -2557,7 +2537,7 @@ class Skip(Read):
                 Expression("Skip", Expression("InputStream", name, n), types, m),
             )
             return
-        for i in range(py_m):
+        for _ in range(py_m):
             result = super(Skip, self).apply(channel, types, evaluation, options)
             if result is SymbolEndOfFile:
                 return result

@@ -331,8 +331,7 @@ class Graphics3DBox(GraphicsBox):
         We include enclosing script tagging.
         """
         json_repr = self.boxes_to_json(leaves, **options)
-        js = f"<graphics3d data='{json_repr}'/>"
-        return js
+        return f"<graphics3d data='{json_repr}'/>"
 
     def boxes_to_json(self, leaves=None, **options):
         """Turn the Graphics3DBox to into a something JSON like.
@@ -364,7 +363,7 @@ class Graphics3DBox(GraphicsBox):
         # Handle other graphics formats.
         format_fn = lookup_method(elements, "json")
 
-        json_repr = json.dumps(
+        return json.dumps(
             {
                 "elements": format_fn(elements, **options),
                 "axes": {
@@ -385,8 +384,6 @@ class Graphics3DBox(GraphicsBox):
                 "protocol": "1.1",
             }
         )
-
-        return json_repr
 
     def boxes_to_mathml(self, elements=None, **options) -> str:
         """Turn the Graphics3DBox into a MathML string"""
@@ -411,11 +408,7 @@ class Graphics3DBox(GraphicsBox):
         elements._apply_boxscaling(boxscale)
 
         format_fn = lookup_method(elements, "asy")
-        if format_fn is not None:
-            asy = format_fn(elements)
-        else:
-            asy = elements.to_asy()
-
+        asy = format_fn(elements) if format_fn is not None else elements.to_asy()
         xmin, xmax, ymin, ymax, zmin, zmax, boxscale, w, h = calc_dimensions()
 
         # TODO: Intelligently place the axes on the longest non-middle edge.
@@ -539,7 +532,7 @@ class Graphics3DBox(GraphicsBox):
                         ["({0},{1},{2})".format(*coords) for coords in line]
                     )
                     boundbox_asy += "draw(({0}), {1});\n".format(path, pen)
-            if 8 <= xi:  # z axis
+            if xi >= 8:  # z axis
                 for i, tick in enumerate(ticks[2][0]):
                     line = [
                         (boundbox_lines[xi][0][0], boundbox_lines[xi][0][1], tick),
@@ -577,7 +570,7 @@ class Graphics3DBox(GraphicsBox):
                     boundbox_asy += "draw(({0}), {1});\n".format(path, pen)
 
         (height, width) = (400, 400)  # TODO: Proper size
-        tex = r"""
+        return r"""
 \begin{{asy}}
 import three;
 import solids;
@@ -598,7 +591,6 @@ currentlight=light(rgb(0.5,0.5,1), specular=red, (2,0,2), (2,2,2), (0,2,2));
             asy,
             boundbox_asy,
         )
-        return tex
 
     def boxes_to_text(self, elements=None, **options):
         if not elements:
@@ -698,8 +690,7 @@ class Arrow3DBox(ArrowBox):
         super(Arrow3DBox, self).process_option(name, value)
 
     def extent(self):
-        result = [coordinate.pos()[0] for line in self.lines for coordinate in line]
-        return result
+        return [coordinate.pos()[0] for line in self.lines for coordinate in line]
 
     def _apply_boxscaling(self, boxscale):
         for line in self.lines:
@@ -729,15 +720,11 @@ class Cone3DBox(InstanceableBuiltin):
         self.radius = item.leaves[1].to_python()
 
     def extent(self):
-        result = []
-        # FIXME: the extent is roughly wrong. It is using the extent of a shpere at each coordinate.
-        # Anyway, it is very difficult to calculate the extent of a cone.
-        result.extend(
-            [
-                coords.add(self.radius, self.radius, self.radius).pos()[0]
-                for coords in self.points
-            ]
-        )
+        result = [
+            coords.add(self.radius, self.radius, self.radius).pos()[0]
+            for coords in self.points
+        ]
+
         result.extend(
             [
                 coords.add(-self.radius, -self.radius, -self.radius).pos()[0]
@@ -801,15 +788,11 @@ class Cylinder3DBox(InstanceableBuiltin):
         self.radius = item.leaves[1].to_python()
 
     def extent(self):
-        result = []
-        # FIXME: instead of `coords.add(±self.radius, ±self.radius, ±self.radius)` we should do:
-        # coords.add(transformation_vector.x * ±self.radius, transformation_vector.y * ±self.radius, transformation_vector.z * ±self.radius)
-        result.extend(
-            [
-                coords.add(self.radius, self.radius, self.radius).pos()[0]
-                for coords in self.points
-            ]
-        )
+        result = [
+            coords.add(self.radius, self.radius, self.radius).pos()[0]
+            for coords in self.points
+        ]
+
         result.extend(
             [
                 coords.add(-self.radius, -self.radius, -self.radius).pos()[0]
@@ -831,8 +814,7 @@ class Line3DBox(LineBox):
         super(Line3DBox, self).process_option(name, value)
 
     def extent(self):
-        result = [coordinate.pos()[0] for line in self.lines for coordinate in line]
-        return result
+        return [coordinate.pos()[0] for line in self.lines for coordinate in line]
 
     def _apply_boxscaling(self, boxscale):
         for line in self.lines:
@@ -857,8 +839,7 @@ class Point3DBox(PointBox):
         super(Point3DBox, self).process_option(name, value)
 
     def extent(self):
-        result = [coordinate.pos()[0] for line in self.lines for coordinate in line]
-        return result
+        return [coordinate.pos()[0] for line in self.lines for coordinate in line]
 
     def _apply_boxscaling(self, boxscale):
         for line in self.lines:
@@ -872,15 +853,11 @@ class Polygon3DBox(PolygonBox):
         super(Polygon3DBox, self).init(*args, **kwargs)
 
     def process_option(self, name, value):
-        if name == "System`VertexNormals":
-            # TODO: process VertexNormals and use them in rendering
-            pass
-        else:
+        if name != "System`VertexNormals":
             super(Polygon3DBox, self).process_option(name, value)
 
     def extent(self):
-        result = [coordinate.pos()[0] for line in self.lines for coordinate in line]
-        return result
+        return [coordinate.pos()[0] for line in self.lines for coordinate in line]
 
     def _apply_boxscaling(self, boxscale):
         for line in self.lines:
@@ -907,13 +884,11 @@ class Sphere3DBox(InstanceableBuiltin):
         self.radius = item.leaves[1].to_python()
 
     def extent(self):
-        result = []
-        result.extend(
-            [
-                coords.add(self.radius, self.radius, self.radius).pos()[0]
-                for coords in self.points
-            ]
-        )
+        result = [
+            coords.add(self.radius, self.radius, self.radius).pos()[0]
+            for coords in self.points
+        ]
+
         result.extend(
             [
                 coords.add(-self.radius, -self.radius, -self.radius).pos()[0]
@@ -942,13 +917,11 @@ class Tube3DBox(InstanceableBuiltin):
         self.radius = item.leaves[1].to_python()
 
     def extent(self):
-        result = []
-        result.extend(
-            [
-                coords.add(self.radius, self.radius, self.radius).pos()[0]
-                for coords in self.points
-            ]
-        )
+        result = [
+            coords.add(self.radius, self.radius, self.radius).pos()[0]
+            for coords in self.points
+        ]
+
         result.extend(
             [
                 coords.add(-self.radius, -self.radius, -self.radius).pos()[0]

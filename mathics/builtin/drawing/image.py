@@ -91,34 +91,35 @@ class _Exif:
 
     @staticmethod
     def extract(im, evaluation):
-        if hasattr(im, "_getexif"):
-            exif = im._getexif()
-            if not exif:
-                return
+        if not hasattr(im, "_getexif"):
+            return
+        exif = im._getexif()
+        if not exif:
+            return
 
-            for k, v in sorted(exif.items(), key=lambda x: x[0]):
-                name = ExifTags.get(k)
-                if not name:
-                    continue
+        for k, v in sorted(exif.items(), key=lambda x: x[0]):
+            name = ExifTags.get(k)
+            if not name:
+                continue
 
-                # EXIF has the following types: Short, Long, Rational, Ascii, Byte
-                # (see http://www.exiv2.org/tags.html). we detect the type from the
-                # Python type Pillow gives us and do the appropiate MMA handling.
+            # EXIF has the following types: Short, Long, Rational, Ascii, Byte
+            # (see http://www.exiv2.org/tags.html). we detect the type from the
+            # Python type Pillow gives us and do the appropiate MMA handling.
 
-                if isinstance(v, tuple) and len(v) == 2:  # Rational
-                    value = Rational(v[0], v[1])
-                    if name == "FocalLength":
-                        value = value.round(2)
-                    else:
-                        value = Expression("Simplify", value).evaluate(evaluation)
-                elif isinstance(v, bytes):  # Byte
-                    value = String(" ".join(["%d" % x for x in v]))
-                elif isinstance(v, (int, str)):  # Short, Long, Ascii
-                    value = v
+            if isinstance(v, tuple) and len(v) == 2:  # Rational
+                value = Rational(v[0], v[1])
+                if name == "FocalLength":
+                    value = value.round(2)
                 else:
-                    continue
+                    value = Expression("Simplify", value).evaluate(evaluation)
+            elif isinstance(v, bytes):  # Byte
+                value = String(" ".join(["%d" % x for x in v]))
+            elif isinstance(v, (int, str)):  # Short, Long, Ascii
+                value = v
+            else:
+                continue
 
-                yield Expression(SymbolRule, String(_Exif._names.get(k, name)), value)
+            yield Expression(SymbolRule, String(_Exif._names.get(k, name)), value)
 
 
 class ImageImport(_ImageBuiltin):
@@ -160,11 +161,10 @@ class ImageExport(_ImageBuiltin):
 
     def apply(self, path, expr, opts, evaluation):
         """ImageExport[path_String, expr_, opts___]"""
-        if isinstance(expr, Image):
-            expr.pil().save(path.get_string_value())
-            return SymbolNull
-        else:
+        if not isinstance(expr, Image):
             return evaluation.message("ImageExport", "noimage")
+        expr.pil().save(path.get_string_value())
+        return SymbolNull
 
 
 # image math
@@ -435,46 +435,35 @@ class ImageResize(_ImageBuiltin):
     }
 
     def _get_image_size_spec(self, old_size, new_size):
-        predefined_sizes = {
-            "System`Tiny": 75,
-            "System`Small": 150,
-            "System`Medium": 300,
-            "System`Large": 450,
-            "System`Automatic": 0,  # placeholder
-        }
         result = new_size.round_to_float()
         if result is not None:
             result = int(result)
-            if result <= 0:
-                return None
-            return result
-
+            return None if result <= 0 else result
         if isinstance(new_size, Symbol):
             name = new_size.get_name()
             if name == "System`All":
                 return old_size
+            predefined_sizes = {
+                "System`Tiny": 75,
+                "System`Small": 150,
+                "System`Medium": 300,
+                "System`Large": 450,
+                "System`Automatic": 0,  # placeholder
+            }
             return predefined_sizes.get(name, None)
         if new_size.has_form("Scaled", 1):
             s = new_size.leaves[0].round_to_float()
-            if s is None:
-                return None
-            return max(1, old_size * s)  # handle negative s values silently
+            return None if s is None else max(1, old_size * s)
         return None
 
     def apply_resize_width(self, image, s, evaluation, options):
         "ImageResize[image_Image, s_, OptionsPattern[ImageResize]]"
         old_w = image.pixels.shape[1]
-        if s.has_form("List", 1):
-            width = s.leaves[0]
-        else:
-            width = s
+        width = s.leaves[0] if s.has_form("List", 1) else s
         w = self._get_image_size_spec(old_w, width)
         if w is None:
             return evaluation.message("ImageResize", "imgrssz", s)
-        if s.has_form("List", 1):
-            height = width
-        else:
-            height = Symbol("Automatic")
+        height = width if s.has_form("List", 1) else Symbol("Automatic")
         return self.apply_resize_width_height(image, width, height, evaluation, options)
 
     def apply_resize_width_height(self, image, width, height, evaluation, options):
@@ -618,7 +607,8 @@ class ImageReflect(_ImageBuiltin):
             ("System`Top", "System`Top"): no_op,
             ("System`Left", "System`Left"): no_op,
             ("System`Right", "System`Right"): no_op,
-        }.get(tuple(specs), None)
+        }.get(tuple(specs))
+
 
         if method is None:
             return evaluation.message(
@@ -869,9 +859,8 @@ class GaussianFilter(_ImageBuiltin):
         "GaussianFilter[image_Image, radius_?RealNumberQ]"
         if len(image.pixels.shape) > 2 and image.pixels.shape[2] > 3:
             return evaluation.message("GaussianFilter", "only3")
-        else:
-            f = PIL.ImageFilter.GaussianBlur(radius.round_to_float())
-            return image.filter(lambda im: im.filter(f))
+        f = PIL.ImageFilter.GaussianBlur(radius.round_to_float())
+        return image.filter(lambda im: im.filter(f))
 
 
 # morphological image filters
@@ -1043,13 +1032,13 @@ class DiamondMatrix(_ImageBuiltin):
         one = Integer1
 
         def rows():
-            for d in range(0, t):
+            for d in range(t):
                 p = [zero] * (t - d)
                 yield p + ([one] * (1 + d * 2)) + p
 
             yield [one] * (2 * t + 1)
 
-            for d in reversed(range(0, t)):
+            for d in reversed(range(t)):
                 p = [zero] * (t - d)
                 yield p + ([one] * (1 + d * 2)) + p
 
@@ -1077,9 +1066,11 @@ class ImageConvolve(_ImageBuiltin):
         numpy_kernel = matrix_to_numpy(kernel)
         pixels = pixels_as_float(image.pixels)
         shape = pixels.shape[:2]
-        channels = []
-        for c in (pixels[:, :, i] for i in range(pixels.shape[2])):
-            channels.append(convolve(c.reshape(shape), numpy_kernel, fixed=True))
+        channels = [
+            convolve(c.reshape(shape), numpy_kernel, fixed=True)
+            for c in (pixels[:, :, i] for i in range(pixels.shape[2]))
+        ]
+
         return Image(numpy.dstack(channels), image.color_space)
 
 
@@ -1334,8 +1325,10 @@ class ColorSeparate(_ImageBuiltin):
         if len(pixels.shape) < 3:
             images.append(pixels)
         else:
-            for i in range(pixels.shape[2]):
-                images.append(Image(pixels[:, :, i], "Grayscale"))
+            images.extend(
+                Image(pixels[:, :, i], "Grayscale") for i in range(pixels.shape[2])
+            )
+
         return Expression(SymbolList, *images)
 
 
@@ -1366,7 +1359,7 @@ class ColorCombine(_ImageBuiltin):
         if not numpy_channels:
             return
 
-        if not all(x.shape == numpy_channels[0].shape for x in numpy_channels[1:]):
+        if any(x.shape != numpy_channels[0].shape for x in numpy_channels[1:]):
             return
 
         return Image(numpy.dstack(numpy_channels), py_colorspace)
@@ -1431,11 +1424,11 @@ class Colorize(_ImageBuiltin):
         if isinstance(values, Image):
             pixels = values.grayscale().pixels
             matrix = pixels_as_ubyte(pixels.reshape(pixels.shape[:2]))
-        else:
-            if not Expression("MatrixQ", values).evaluate(evaluation).is_true():
-                return
+        elif Expression("MatrixQ", values).evaluate(evaluation).is_true():
             matrix = matrix_to_numpy(values)
 
+        else:
+            return
         a, n = _linearize(matrix)
         # the maximum value for n is the number of pixels in a, which is acceptable and never too large.
 
@@ -1526,10 +1519,7 @@ class ImageTake(_ImageBuiltin):
     def apply(self, image, n, evaluation):
         "ImageTake[image_Image, n_Integer]"
         py_n = n.get_int_value()
-        if py_n >= 0:
-            pixels = image.pixels[:py_n]
-        elif py_n < 0:
-            pixels = image.pixels[py_n:]
+        pixels = image.pixels[:py_n] if py_n >= 0 else image.pixels[py_n:]
         return Image(pixels, image.color_space)
 
     def _slice(self, image, i1, i2, axis):
@@ -1538,10 +1528,7 @@ class ImageTake(_ImageBuiltin):
         py_i2 = min(max(i2.get_int_value() - 1, 0), n - 1)
 
         def flip(pixels):
-            if py_i1 > py_i2:
-                return numpy_flip(pixels, axis)
-            else:
-                return pixels
+            return numpy_flip(pixels, axis) if py_i1 > py_i2 else pixels
 
         return slice(min(py_i1, py_i2), 1 + max(py_i1, py_i2)), flip
 
@@ -1872,14 +1859,11 @@ class Image(Atom):
     def color_convert(self, to_color_space, preserve_alpha=True):
         if to_color_space == self.color_space and preserve_alpha:
             return self
-        else:
-            pixels = pixels_as_float(self.pixels)
-            converted = convert_color(
-                pixels, self.color_space, to_color_space, preserve_alpha
-            )
-            if converted is None:
-                return None
-            return Image(converted, to_color_space)
+        pixels = pixels_as_float(self.pixels)
+        converted = convert_color(
+            pixels, self.color_space, to_color_space, preserve_alpha
+        )
+        return None if converted is None else Image(converted, to_color_space)
 
     def grayscale(self):
         return self.color_convert("Grayscale")
@@ -1893,11 +1877,7 @@ class Image(Atom):
         scaled_width = width
         scaled_height = height
 
-        if len(shape) >= 3 and shape[2] == 4:
-            pixels_format = "RGBA"
-        else:
-            pixels_format = "RGB"
-
+        pixels_format = "RGBA" if len(shape) >= 3 and shape[2] == 4 else "RGB"
         pillow = PIL.Image.fromarray(pixels, pixels_format)
 
         # if the image is very small, scale it up using nearest neighbour.
@@ -1938,10 +1918,7 @@ class Image(Atom):
         return "-Image-"
 
     def get_sort_key(self, pattern_sort=False):
-        if pattern_sort:
-            return super(Image, self).get_sort_key(True)
-        else:
-            return hash(self)
+        return super(Image, self).get_sort_key(True) if pattern_sort else hash(self)
 
     def sameQ(self, other) -> bool:
         """Mathics SameQ"""
@@ -2008,12 +1985,11 @@ class ImageAtom(AtomBuiltin):
     def apply_create(self, array, evaluation):
         "Image[array_]"
         pixels = _image_pixels(array.to_python())
-        if pixels is not None:
-            shape = pixels.shape
-            is_rgb = len(shape) == 3 and shape[2] in (3, 4)
-            return Image(pixels.clip(0, 1), "RGB" if is_rgb else "Grayscale")
-        else:
+        if pixels is None:
             return Expression("Image", array)
+        shape = pixels.shape
+        is_rgb = len(shape) == 3 and shape[2] in (3, 4)
+        return Image(pixels.clip(0, 1), "RGB" if is_rgb else "Grayscale")
 
 
 # complex operations
@@ -2215,9 +2191,9 @@ if "Pyston" not in sys.version:
             ):
                 return self.default_colors[random.randint(0, 7)]
 
-            font_base_path = os.path.dirname(os.path.abspath(__file__)) + "/../fonts/"
+            font_base_path = f"{os.path.dirname(os.path.abspath(__file__))}/../fonts/"
 
-            font_path = os.path.realpath(font_base_path + "AmaticSC-Bold.ttf")
+            font_path = os.path.realpath(f"{font_base_path}AmaticSC-Bold.ttf")
             if not os.path.exists(font_path):
                 font_path = None
 

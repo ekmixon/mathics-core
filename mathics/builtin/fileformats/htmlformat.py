@@ -36,8 +36,7 @@ def node_to_xml_element(node, strip_whitespace=True):
             if text:
                 yield String(text)
         for child in node:
-            for element in node_to_xml_element(child, strip_whitespace):
-                yield element
+            yield from node_to_xml_element(child, strip_whitespace)
         tail = node.tail
         if tail:
             if strip_whitespace:
@@ -143,10 +142,7 @@ class _Get(_HTMLBuiltin):
     def apply(self, text, evaluation):
         """%(name)s[text_String]"""
         root = parse_html(self._parse, text, evaluation)
-        if isinstance(root, Symbol):  # $Failed?
-            return root
-        else:
-            return xml_object(root)
+        return root if isinstance(root, Symbol) else xml_object(root)
 
 
 class HTMLGet(_Get):
@@ -222,11 +218,7 @@ class _DataImport(_TagImport):
                     data_list.append(String(newline.sub(" ", " ".join(t))))
 
         def traverse(parent):
-            if full_data:
-                data = []
-            else:
-                data = None
-
+            data = [] if full_data else None
             for node in parent:
                 tag = node.tag
                 if tag == "table":
@@ -336,8 +328,7 @@ class ImageLinksImport(_LinksImport):
 
     def _links(self, tree):
         for link in tree.xpath("//img"):
-            src = link.get("src")
-            if src:
+            if src := link.get("src"):
                 yield src
 
 

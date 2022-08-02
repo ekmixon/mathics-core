@@ -27,13 +27,9 @@ def same_monomial(expr, x, x0):
     if expr.get_head() is not SymbolPlus:
         return False
     y, y0 = expr.leaves
-    if y0.sameQ(x):
-        if x0.sameQ(-y) or y.sameQ(-x0):
-            return True
-    if y.sameQ(x):
-        if x.sameQ(-y) or y.sameQ(-x):
-            return True
-    return False
+    if y0.sameQ(x) and (x0.sameQ(-y) or y.sameQ(-x0)):
+        return True
+    return bool(y.sameQ(x) and (x.sameQ(-y) or y.sameQ(-x)))
 
 
 """
@@ -161,7 +157,7 @@ def series_plus_series(series1, series2):
     nmax = min(nmax1_, nmax2_)  # relative to nmin
     len_newdata = nmax
     nmax = nmax + nmin
-    data = [Integer0 for x in range(len_newdata)]
+    data = [Integer0 for _ in range(len_newdata)]
 
     for k, coeff in enumerate(data1):
         p = k * int(den1 / den)
@@ -171,14 +167,9 @@ def series_plus_series(series1, series2):
     for k, coeff in enumerate(data2):
         p = k * int(den2 / den) + offset2
         if p < len_newdata:
-            if data[p].is_zero:
-                data[p] = coeff
-            else:
-                data[p] = Expression(SymbolPlus, data[p], coeff)
-
+            data[p] = coeff if data[p].is_zero else Expression(SymbolPlus, data[p], coeff)
     data = Expression(SymbolList, *data)
-    result = reduce_series_trailing_zeros((data, nmin, nmax, den))
-    return result
+    return reduce_series_trailing_zeros((data, nmin, nmax, den))
 
 
 def series_times_series(series1, series2):
@@ -197,7 +188,7 @@ def series_times_series(series1, series2):
     nmin = nmin1 * offset1 + nmin2 * offset2
     nmax = min(nmax1 * den2, nmax2 * den1)
     len_newdata = min(len(data1) * len(data2), nmax)
-    data = [Integer0 for k in range(len_newdata)]
+    data = [Integer0 for _ in range(len_newdata)]
 
     for k1, c1 in enumerate(data1):
         for k2, c2 in enumerate(data2):
@@ -231,7 +222,7 @@ def _series_times_rational_power(series, num_power, den_power):
     nmin_ = int(nmin * den_ / den + num_power * den_ / den_power)
     nmax_ = int(nmax * den_ / den + num_power * den_ / den_power)
     granularity = int(den_ / den_power)
-    data_ = [Integer0 for u in range(len(data) * granularity)]
+    data_ = [Integer0 for _ in range(len(data) * granularity)]
     for k, val in enumerate(data):
         data_[k * granularity] = val
     return reduce_series_trailing_zeros(
@@ -251,7 +242,7 @@ def reduce_series_trailing_zeros(series):
         return series
     i = 0
     while i < len(data) and data[i].is_zero:
-        i = i + 1
+        i += 1
     nmin = nmin + i
     data = data[i:]
     useful_len = nmax - nmin
@@ -259,8 +250,7 @@ def reduce_series_trailing_zeros(series):
         data = data[:useful_len]
     if len(data) == 0:
         nmin = nmax
-    result = (Expression(SymbolList, *data), nmin, nmax, den)
-    return result
+    return Expression(SymbolList, *data), nmin, nmax, den
 
 
 def reduce_series(series):
@@ -279,17 +269,23 @@ def reduce_series(series):
         data = data.leaves
         notdone = True
         while notdone:
-            if (den % factor == 0) and (nmin % factor == 0) and (nmax % factor == 0):
-                if all(
-                    q.is_zero for q in data[1 + factor :: 2] for r in range(factor - 1)
-                ):
-                    data = data[0::factor]
-                    nmin, nmax, den = (
-                        int(nmin / factor),
-                        int(nmax / factor),
-                        int(den / factor),
-                    )
-                    continue
+            if (
+                (den % factor == 0)
+                and (nmin % factor == 0)
+                and (nmax % factor == 0)
+                and all(
+                    q.is_zero
+                    for q in data[1 + factor :: 2]
+                    for r in range(factor - 1)
+                )
+            ):
+                data = data[0::factor]
+                nmin, nmax, den = (
+                    int(nmin / factor),
+                    int(nmax / factor),
+                    int(den / factor),
+                )
+                continue
             notdone = False
 
         if series[-1] == den:
@@ -332,7 +328,7 @@ def reduce_series_plus(series, terms, x, x0):
             elif not x0.sameQ(y0):
                 other_terms.append(term)
                 continue
-            new_series = series_plus_series(
+            if new_series := series_plus_series(
                 series,
                 (
                     data,
@@ -340,20 +336,23 @@ def reduce_series_plus(series, terms, x, x0):
                     nummax.get_int_value(),
                     den.get_int_value(),
                 ),
-            )
-            if new_series:
+            ):
                 series = new_series
                 continue
         # TODO: handle constant terms, and terms of the form x^n, a x^n
         other_terms.append(term)
-    if len(other_terms) == 0:
+    if not other_terms:
         return series, None
 
-    if series is old_series:
-        if len(other_terms) == len(old_terms) and all(
-            term.sameQ(old_term) for term, old_term in zip(other_terms, old_terms)
-        ):
-            return None, None
+    if (
+        series is old_series
+        and len(other_terms) == len(old_terms)
+        and all(
+            term.sameQ(old_term)
+            for term, old_term in zip(other_terms, old_terms)
+        )
+    ):
+        return None, None
     series = reduce_series(series)
     return series, other_terms
 
@@ -424,7 +423,7 @@ def series_derivative(series, x, x0, y, evaluation):
     """
     data, nmin, nmax, den = series
     coeffs = list(data.leaves)
-    if all([not coeff.has_symbol(y.get_name()) for coeff in coeffs]):
+    if all(not coeff.has_symbol(y.get_name()) for coeff in coeffs):
         dcoeffs = None
     else:
         dcoeffs = [Expression(SymbolD, coeff, y) for coeff in coeffs]
@@ -446,7 +445,7 @@ def series_derivative(series, x, x0, y, evaluation):
         else:
             return None
     nmax = nmax - den
-    trailings0 = [Integer0 for k in range(den)]
+    trailings0 = [Integer0 for _ in range(den)]
     if nmin != 0:
         if den == 1:
             coeffs2 = [
@@ -480,7 +479,6 @@ def series_derivative(series, x, x0, y, evaluation):
     else:
         new_coeffs = [c1.evaluate(evaluation) for c1 in coeffs2]
 
-    result = reduce_series_trailing_zeros(
+    return reduce_series_trailing_zeros(
         (Expression(SymbolList, *new_coeffs), nmin, nmax, den)
     )
-    return result

@@ -22,8 +22,7 @@ def create_execution_engine():
     target_machine = target.create_target_machine()
     # And an execution engine with an empty backing module
     backing_mod = llvm.parse_assembly("")
-    engine = llvm.create_mcjit_compiler(backing_mod, target_machine)
-    return engine
+    return llvm.create_mcjit_compiler(backing_mod, target_machine)
 
 
 def compile_ir(engine, llvm_ir):
@@ -51,8 +50,6 @@ def _compile(expr, args):
     # lookup function pointer
     func_ptr = engine.get_function_address("mathics")
 
-    # run function via ctypes
-    cfunc = CFUNCTYPE(
+    return CFUNCTYPE(
         llvm_to_ctype(ret_type), *(llvm_to_ctype(arg.type) for arg in args)
     )(func_ptr)
-    return cfunc

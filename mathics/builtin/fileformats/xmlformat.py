@@ -46,16 +46,15 @@ _namespace_key = Expression(
 
 
 def node_to_xml_element(node, parent_namespace=None, strip_whitespace=True):
-    if lxml_available:
-        if isinstance(node, ET._Comment):
-            items = [
-                Expression(
-                    Expression("XMLObject", String("Comment")), String(node.text)
-                )
-            ]
-            if node.tail is not None:
-                items.append(String(node.tail))
-            return items
+    if lxml_available and isinstance(node, ET._Comment):
+        items = [
+            Expression(
+                Expression("XMLObject", String("Comment")), String(node.text)
+            )
+        ]
+        if node.tail is not None:
+            items.append(String(node.tail))
+        return items
 
     # see https://reference.wolfram.com/language/XML/tutorial/RepresentingXML.html
 
@@ -74,8 +73,8 @@ def node_to_xml_element(node, parent_namespace=None, strip_whitespace=True):
             localname = tag
         else:
             m = re.match(r"\{(.*)\}(.*)", node.tag)
-            namespace = m.group(1)
-            localname = m.group(2)
+            namespace = m[1]
+            localname = m[2]
 
     def children():
         text = node.text
@@ -85,10 +84,10 @@ def node_to_xml_element(node, parent_namespace=None, strip_whitespace=True):
             if text:
                 yield String(text)
         for child in node:
-            for element in node_to_xml_element(
+            yield from node_to_xml_element(
                 child, default_namespace, strip_whitespace
-            ):
-                yield element
+            )
+
         tail = node.tail
         if tail:
             if strip_whitespace:
@@ -98,10 +97,7 @@ def node_to_xml_element(node, parent_namespace=None, strip_whitespace=True):
 
     def attributes():
         for name, value in node.attrib.items():
-            if name == "xmlns":
-                name = _namespace_key
-            else:
-                name = String(name)
+            name = _namespace_key if name == "xmlns" else String(name)
             yield Expression("Rule", name, from_python(value))
 
     if namespace is None or namespace == default_namespace:
@@ -249,10 +245,7 @@ class _Get(Builtin):
     def apply(self, text, evaluation):
         """%(name)s[text_String]"""
         root = parse_xml(self._parse, text, evaluation)
-        if isinstance(root, Symbol):  # $Failed?
-            return root
-        else:
-            return xml_object(root)
+        return root if isinstance(root, Symbol) else xml_object(root)
 
 
 class XMLGet(_Get):

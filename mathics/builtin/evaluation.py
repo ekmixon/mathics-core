@@ -342,7 +342,5 @@ class Quit(Builtin):
 
     def apply(self, evaluation, n):
         "%(name)s[n___]"
-        exitcode = 0
-        if isinstance(n, Integer):
-            exitcode = n.get_int_value()
+        exitcode = n.get_int_value() if isinstance(n, Integer) else 0
         raise SystemExit(exitcode)

@@ -38,23 +38,23 @@ def get_part(varlist, indices):
     "Simple part extraction. indices must be a list of python integers."
 
     def rec(cur, rest):
-        if rest:
-            if isinstance(cur, Atom):
-                raise PartDepthError(rest[0])
-            pos = rest[0]
-            elements = cur.get_elements()
-            try:
-                if pos > 0:
-                    part = elements[pos - 1]
-                elif pos == 0:
-                    part = cur.get_head()
-                else:
-                    part = elements[pos]
-            except IndexError:
-                raise PartRangeError
-            return rec(part, rest[1:])
-        else:
+        if not rest:
             return cur
+
+        if isinstance(cur, Atom):
+            raise PartDepthError(rest[0])
+        pos = rest[0]
+        elements = cur.get_elements()
+        try:
+            if pos > 0:
+                part = elements[pos - 1]
+            elif pos == 0:
+                part = cur.get_head()
+            else:
+                part = elements[pos]
+        except IndexError:
+            raise PartRangeError
+        return rec(part, rest[1:])
 
     return rec(varlist, indices).copy()
 
@@ -156,11 +156,7 @@ def _parts_sequence_selector(pspec):
     """
     Selector for `System`Sequence` part specification
     """
-    if not isinstance(pspec, (tuple, list)):
-        indices = [pspec]
-    else:
-        indices = pspec
-
+    indices = pspec if isinstance(pspec, (tuple, list)) else [pspec]
     for index in indices:
         if not isinstance(index, Integer):
             raise MessageException("Part", "pspec", pspec)
@@ -217,8 +213,7 @@ def _list_parts(exprs, selectors, evaluation):
     unwrapping function in the selector.
     """
     if not selectors:
-        for expr in exprs:
-            yield expr
+        yield from exprs
     else:
         selector = selectors[0]
         if isinstance(selector, tuple):
@@ -233,8 +228,7 @@ def _list_parts(exprs, selectors, evaluation):
             picked = list(_list_parts(selected, selectors[1:], evaluation))
 
             if unwrap is None:
-                expr = expr.restructure(expr.head, picked, evaluation)
-                yield expr
+                yield expr.restructure(expr.head, picked, evaluation)
             else:
                 yield unwrap(picked)
 
@@ -275,14 +269,14 @@ def walk_parts(list_of_list, indices, evaluation, assign_rhs=None):
             return False
         if isinstance(result, Expression):
             result.clear_cache()
-        return result
     else:
         try:
             result = _parts(walk_list, _part_selectors(indices), evaluation)
         except MessageException as e:
             e.message(evaluation)
             return False
-        return result
+
+    return result
 
 
 def is_in_level(current, depth, start=1, stop=None):
@@ -305,11 +299,10 @@ def walk_levels(
     include_pos=False,
     cur_pos=[],
 ):
+    depth = 0
     if isinstance(expr, Atom):
-        depth = 0
         new_expr = expr
     else:
-        depth = 0
         if heads:
             head, head_depth = walk_levels(
                 expr.head,
@@ -340,10 +333,7 @@ def walk_levels(
             leaves.append(leaf)
         new_expr = Expression(head, *leaves)
     if is_in_level(current, depth, start, stop):
-        if include_pos:
-            new_expr = callback(new_expr, cur_pos)
-        else:
-            new_expr = callback(new_expr)
+        new_expr = callback(new_expr, cur_pos) if include_pos else callback(new_expr)
     return new_expr, depth
 
 
@@ -383,10 +373,7 @@ def python_seq(start, stop, step, length):
         return None
 
     # special empty case
-    if stop is None and length is not None:
-        empty_stop = length
-    else:
-        empty_stop = stop
+    empty_stop = length if stop is None and length is not None else stop
     if start is not None and empty_stop + 1 == start and step > 0:
         return slice(0, 0, 1)
 
@@ -400,10 +387,7 @@ def python_seq(start, stop, step, length):
         start -= 1
 
     if stop is None:
-        if step < 0:
-            stop = 0
-        else:
-            stop = length - 1
+        stop = 0 if step < 0 else length - 1
     elif stop < 0:
         stop += length
     else:
@@ -522,10 +506,7 @@ def deletecases_with_levelspec(expr, pattern, evaluation, levelspec=1, n=-1):
         lsmax = levelspec + 1
     else:
         lsmin = levelspec[0]
-        if levelspec[1]:
-            lsmax = levelspec[1] + 1
-        else:
-            lsmax = -1
+        lsmax = levelspec[1] + 1 if levelspec[1] else -1
     tree = [[expr]]
     changed_marks = [
         [False],
@@ -543,7 +524,7 @@ def deletecases_with_levelspec(expr, pattern, evaluation, levelspec=1, n=-1):
             if changed:
                 leaves = [leaf for leaf in leaves if leaf is not nothing]
             curr_index.pop()
-            if len(curr_index) == 0:
+            if not curr_index:
                 break
             idx = curr_index[-1]
             changed = changed or changed_marks[-1][idx]
@@ -551,8 +532,6 @@ def deletecases_with_levelspec(expr, pattern, evaluation, levelspec=1, n=-1):
             if changed:
                 head = tree[-1][curr_index[-1]].get_head()
                 tree[-1][idx] = Expression(head, *leaves)
-            if len(curr_index) == 0:
-                break
             curr_index[-1] = curr_index[-1] + 1
             continue
         curr_element = tree[-1][curr_index[-1]]
@@ -567,7 +546,7 @@ def deletecases_with_levelspec(expr, pattern, evaluation, levelspec=1, n=-1):
             continue
         else:
             tree.append(list(curr_element.get_elements()))
-            changed_marks.append([False for s in tree[-1]])
+            changed_marks.append([False for _ in tree[-1]])
             curr_index.append(0)
     return tree[0][0]
 
@@ -595,13 +574,11 @@ def find_matching_indices_with_levelspec(expr, pattern, evaluation, levelspec=1,
     tree = [expr.get_elements()]
     curr_index = [0]
     found = []
-    while len(tree) > 0:
-        if n == 0:
-            break
+    while tree and n != 0:
         if curr_index[-1] == len(tree[-1]):
             curr_index.pop()
             tree.pop()
-            if len(curr_index) != 0:
+            if curr_index:
                 curr_index[-1] = curr_index[-1] + 1
             continue
         curr_element = tree[-1][curr_index[-1]]
@@ -612,7 +589,6 @@ def find_matching_indices_with_levelspec(expr, pattern, evaluation, levelspec=1,
             continue
         if isinstance(curr_element, Atom) or lsmax == len(curr_index):
             curr_index[-1] = curr_index[-1] + 1
-            continue
         else:
             tree.append(curr_element.get_elements())
             curr_index.append(0)

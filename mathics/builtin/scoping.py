@@ -180,8 +180,7 @@ class Block(Builtin):
         "Block[vars_, expr_]"
 
         vars = dict(get_scoping_vars(vars, "Block", evaluation))
-        result = dynamic_scoping(expr.evaluate, vars, evaluation)
-        return result
+        return dynamic_scoping(expr.evaluate, vars, evaluation)
 
 
 class ModuleNumber(Predefined):
@@ -279,8 +278,7 @@ class Module(Builtin):
                 evaluation.definitions.set_ownvalue(new_name, new_def.copy())
             replace[name] = Symbol(new_name)
         new_expr = expr.replace_vars(replace, in_scoping=False)
-        result = new_expr.evaluate(evaluation)
-        return result
+        return new_expr.evaluate(evaluation)
 
 
 class Unique(Predefined):
@@ -426,10 +424,7 @@ class Unique(Predefined):
             for att in attrs:
                 evaluation.definitions.set_attribute(symbol.get_name(), att)
 
-        if vars.has_form("List", None):
-            return Expression("List", *list)
-        else:
-            return list[0]
+        return Expression("List", *list) if vars.has_form("List", None) else list[0]
 
 
 class Contexts(Builtin):
@@ -447,9 +442,10 @@ class Contexts(Builtin):
     def apply(self, evaluation):
         "Contexts[]"
 
-        contexts = set()
-        for name in evaluation.definitions.get_names():
-            contexts.add(String(name[: name.rindex("`") + 1]))
+        contexts = {
+            String(name[: name.rindex("`") + 1])
+            for name in evaluation.definitions.get_names()
+        }
 
         return Expression("List", *sorted(contexts))
 

@@ -33,10 +33,7 @@ class _ColorObject(Builtin):
             "name": strip_context(self.get_name()),
             "text_name": text_name,
         }
-        if self.__doc__ is None:
-            self.__doc__ = doc
-        else:
-            self.__doc__ = doc + self.__doc__
+        self.__doc__ = doc if self.__doc__ is None else doc + self.__doc__
 
 
 class Black(_ColorObject):

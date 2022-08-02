@@ -97,10 +97,7 @@ class Environment(Builtin):
     def apply(self, var, evaluation):
         "Environment[var_String]"
         env_var = var.get_string_value()
-        if env_var not in os.environ:
-            return SymbolFailed
-        else:
-            return String(os.environ[env_var])
+        return String(os.environ[env_var]) if env_var in os.environ else SymbolFailed
 
 
 class Failed(Predefined):
@@ -292,7 +289,7 @@ class ScriptCommandLine(Predefined):
             # not run in script mode
             return Expression(SymbolList)
         scriptname = "" if dash_index == 0 else sys.argv[dash_index - 1]
-        parms = [scriptname] + [s for s in sys.argv[dash_index + 1 :]]
+        parms = [scriptname] + list(sys.argv[dash_index + 1 :])
         return Expression(SymbolList, *(String(arg) for arg in parms))
 
 

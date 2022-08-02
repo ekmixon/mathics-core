@@ -138,9 +138,7 @@ class TerminalShell(MathicsLineFeeder):
         print(self.to_output(str(out)))
 
     def read_line(self, prompt):
-        if self.using_readline:
-            return self.rl_read_line(prompt)
-        return input(prompt)
+        return self.rl_read_line(prompt) if self.using_readline else input(prompt)
 
     def print_result(self, result, no_out_prompt=False, strict_wl_output=False):
         if result is None:
@@ -164,7 +162,7 @@ class TerminalShell(MathicsLineFeeder):
             out_str = "-Graph-"
 
         output = self.to_output(out_str)
-        mess = self.get_out_prompt() if not no_out_prompt else ""
+        mess = "" if no_out_prompt else self.get_out_prompt()
         print(mess + output + "\n")
 
     def rl_read_line(self, prompt):
@@ -196,7 +194,7 @@ class TerminalShell(MathicsLineFeeder):
             return None
 
     def get_completion_candidates(self, text):
-        matches = self.definitions.get_matching_names(text + "*")
+        matches = self.definitions.get_matching_names(f"{text}*")
         if "`" not in text:
             matches = [strip_context(m) for m in matches]
         return matches
@@ -316,8 +314,9 @@ Please contribute to Mathics!""",
     )
 
     argparser.add_argument(
-        "--version", "-v", action="version", version="%(prog)s " + __version__
+        "--version", "-v", action="version", version=f"%(prog)s {__version__}"
     )
+
 
     argparser.add_argument(
         "--strict-wl-output",

@@ -305,12 +305,14 @@ class OrderedQ(Builtin):
     def apply(self, expr, evaluation):
         "OrderedQ[expr_]"
 
-        for index, value in enumerate(expr.leaves[:-1]):
-            if expr.leaves[index] <= expr.leaves[index + 1]:
-                continue
-            else:
-                return SymbolFalse
-        return SymbolTrue
+        return next(
+            (
+                SymbolFalse
+                for index, value in enumerate(expr.leaves[:-1])
+                if expr.leaves[index] > expr.leaves[index + 1]
+            ),
+            SymbolTrue,
+        )
 
 
 class Order(Builtin):
@@ -449,10 +451,7 @@ class Apply(BinaryOperator):
             return
 
         def callback(level):
-            if isinstance(level, Atom):
-                return level
-            else:
-                return Expression(f, *level.leaves)
+            return level if isinstance(level, Atom) else Expression(f, *level.leaves)
 
         heads = self.get_option(options, "Heads", evaluation).is_true()
         result, depth = walk_levels(expr, start, stop, heads=heads, callback=callback)
@@ -803,32 +802,31 @@ class MapThread(Builtin):
             "walk all trees concurrently and build result"
             if depth == n:
                 return Expression(f, *args)
-            else:
-                dim = None
-                for i, arg in enumerate(args):
-                    if not arg.has_form("List", None):
-                        raise MessageException(
-                            "MapThread", "mptd", heads[i], i + 1, full_expr, depth, n
-                        )
-                    if dim is None:
-                        dim = len(arg.leaves)
-                    if dim != len(arg.leaves):
-                        raise MessageException(
-                            "MapThread",
-                            "mptc",
-                            1,
-                            i + 1,
-                            full_expr,
-                            dim,
-                            len(arg.leaves),
-                        )
-                return Expression(
-                    "List",
-                    *[
-                        walk([arg.leaves[i] for arg in args], depth + 1)
-                        for i in range(dim)
-                    ]
-                )
+            dim = None
+            for i, arg in enumerate(args):
+                if not arg.has_form("List", None):
+                    raise MessageException(
+                        "MapThread", "mptd", heads[i], i + 1, full_expr, depth, n
+                    )
+                if dim is None:
+                    dim = len(arg.leaves)
+                if dim != len(arg.leaves):
+                    raise MessageException(
+                        "MapThread",
+                        "mptc",
+                        1,
+                        i + 1,
+                        full_expr,
+                        dim,
+                        len(arg.leaves),
+                    )
+            return Expression(
+                "List",
+                *[
+                    walk([arg.leaves[i] for arg in args], depth + 1)
+                    for i in range(dim)
+                ]
+            )
 
         try:
             return walk(heads)
@@ -904,10 +902,7 @@ class FreeQ(Builtin):
         "FreeQ[expr_, form_]"
 
         form = Pattern.create(form)
-        if expr.is_free(form, evaluation):
-            return SymbolTrue
-        else:
-            return SymbolFalse
+        return SymbolTrue if expr.is_free(form, evaluation) else SymbolFalse
 
 
 class Flatten(Builtin):
@@ -1198,7 +1193,7 @@ class Operate(Builtin):
         expr = expr.copy()
         e = expr
 
-        for i in range(1, head_depth):
+        for _ in range(1, head_depth):
             e = e.head
             if isinstance(e, Atom):
                 # n is higher than the depth of heads in expr: return
@@ -1229,9 +1224,7 @@ class Through(Builtin):
     def apply(self, p, args, x, evaluation):
         "Through[p_[args___][x___]]"
 
-        items = []
-        for leaf in args.get_sequence():
-            items.append(Expression(leaf, *x.get_sequence()))
+        items = [Expression(leaf, *x.get_sequence()) for leaf in args.get_sequence()]
         return Expression(p, *items)
 
 
@@ -1247,7 +1240,8 @@ class ByteCount(Builtin):
 
     def apply(self, expression, evaluation):
         "ByteCount[expression_]"
-        if not bytecount_support:
-            return evaluation.message("ByteCount", "pypy")
-        else:
-            return Integer(count_bytes(expression))
+        return (
+            Integer(count_bytes(expression))
+            if bytecount_support
+            else evaluation.message("ByteCount", "pypy")
+        )

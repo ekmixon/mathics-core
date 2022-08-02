@@ -70,7 +70,7 @@ class SparseArray(Builtin):
                     return
                 if not newleaf.has_form("SparseArray", None):
                     return
-                if not dims == newleaf.leaves[1]:
+                if dims != newleaf.leaves[1]:
                     return
                 leaves.append(newleaf)
         else:

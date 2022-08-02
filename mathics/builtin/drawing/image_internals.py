@@ -49,10 +49,7 @@ def numpy_flip(pixels, axis):
 
 def numpy_to_matrix(pixels):
     channels = pixels.shape[2]
-    if channels == 1:
-        return pixels[:, :, 0].tolist()
-    else:
-        return pixels.tolist()
+    return pixels[:, :, 0].tolist() if channels == 1 else pixels.tolist()
 
 
 def pixels_as_float(pixels):

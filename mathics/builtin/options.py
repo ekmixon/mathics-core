@@ -85,21 +85,19 @@ class Options(Builtin):
     def apply(self, f, evaluation):
         "Options[f_]"
 
-        name = f.get_name()
-        if not name:
-            if isinstance(f, Image):
-                # FIXME ColorSpace, MetaInformation
-                options = f.metadata
-            else:
-                evaluation.message("Options", "sym", f, 1)
-                return
-        else:
+        if name := f.get_name():
             options = evaluation.definitions.get_options(name)
-        result = []
-        for option, value in sorted(options.items(), key=lambda item: item[0]):
-            # Don't use HoldPattern, since the returned List should be
-            # assignable to Options again!
-            result.append(Expression("RuleDelayed", Symbol(option), value))
+        elif isinstance(f, Image):
+            # FIXME ColorSpace, MetaInformation
+            options = f.metadata
+        else:
+            evaluation.message("Options", "sym", f, 1)
+            return
+        result = [
+            Expression("RuleDelayed", Symbol(option), value)
+            for option, value in sorted(options.items(), key=lambda item: item[0])
+        ]
+
         return Expression("List", *result)
 
 
@@ -210,14 +208,11 @@ class OptionValue(Builtin):
                                 name,
                                 evaluation,
                             )
-                            if val:
-                                break
                         else:
                             values = element.get_option_values(evaluation)
                             val = get_option(values, name, evaluation)
-                            if val:
-                                break
-
+                        if val:
+                            break
         if val is None and evaluation.options:
             val = get_option(evaluation.options, name, evaluation)
         if val is None:
@@ -272,8 +267,7 @@ class Default(Builtin):
         if not name:
             evaluation.message("Default", "sym", f, 1)
             return
-        result = get_default_value(name, evaluation, *i)
-        return result
+        return get_default_value(name, evaluation, *i)
 
 
 class OptionQ(Test):
@@ -310,10 +304,7 @@ class OptionQ(Test):
 
     def test(self, expr):
         expr = expr.flatten_with_respect_to_head(SymbolList)
-        if not expr.has_form("List", None):
-            expr = [expr]
-        else:
-            expr = expr.get_elements()
+        expr = expr.get_elements() if expr.has_form("List", None) else [expr]
         return all(
             e.has_form("Rule", None) or e.has_form("RuleDelayed", 2) for e in expr
         )
@@ -340,10 +331,7 @@ class NotOptionQ(Test):
 
     def test(self, expr):
         expr = expr.flatten_with_respect_to_head(SymbolList)
-        if not expr.has_form("List", None):
-            expr = [expr]
-        else:
-            expr = expr.get_elements()
+        expr = expr.get_elements() if expr.has_form("List", None) else [expr]
         return not all(
             e.has_form("Rule", None) or e.has_form("RuleDelayed", 2) for e in expr
         )

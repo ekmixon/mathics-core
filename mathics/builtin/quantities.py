@@ -191,9 +191,7 @@ class Quantity(Builtin):
     summary_text = "quantity with units"
 
     def validate(self, unit, evaluation):
-        if KnownUnitQ(unit).evaluate(evaluation) is Symbol("False"):
-            return False
-        return True
+        return KnownUnitQ(unit).evaluate(evaluation) is not Symbol("False")
 
     def apply_makeboxes(self, mag, unit, f, evaluation):
         "MakeBoxes[Quantity[mag_, unit_String], f:StandardForm|TraditionalForm|OutputForm|InputForm]"
@@ -210,31 +208,31 @@ class Quantity(Builtin):
     def apply_n(self, mag, unit, evaluation):
         "Quantity[mag_, unit_String]"
 
-        if self.validate(unit, evaluation):
-            if mag.has_form("List", None):
-                results = []
-                for i in range(len(mag.leaves)):
-                    quantity = Q_(mag.leaves[i], unit.get_string_value().lower())
-                    results.append(
-                        Expression(
-                            "Quantity", quantity.magnitude, String(quantity.units)
-                        )
-                    )
-                return Expression(SymbolList, *results)
-            else:
-                quantity = Q_(mag, unit.get_string_value().lower())
-                return Expression(
-                    "Quantity", quantity.magnitude, String(quantity.units)
-                )
-        else:
+        if not self.validate(unit, evaluation):
             return evaluation.message("Quantity", "unkunit", unit)
+        if mag.has_form("List", None):
+            results = []
+            for i in range(len(mag.leaves)):
+                quantity = Q_(mag.leaves[i], unit.get_string_value().lower())
+                results.append(
+                    Expression(
+                        "Quantity", quantity.magnitude, String(quantity.units)
+                    )
+                )
+            return Expression(SymbolList, *results)
+        else:
+            quantity = Q_(mag, unit.get_string_value().lower())
+            return Expression(
+                "Quantity", quantity.magnitude, String(quantity.units)
+            )
 
     def apply_1(self, unit, evaluation):
         "Quantity[unit_]"
-        if not isinstance(unit, String):
-            return evaluation.message("Quantity", "unkunit", unit)
-        else:
-            return self.apply_n(Integer(1), unit, evaluation)
+        return (
+            self.apply_n(Integer(1), unit, evaluation)
+            if isinstance(unit, String)
+            else evaluation.message("Quantity", "unkunit", unit)
+        )
 
 
 class QuantityQ(Test):
@@ -270,16 +268,10 @@ class QuantityQ(Test):
             if len(leaves) < 1 or len(leaves) > 2:
                 return False
             elif len(leaves) == 1:
-                if validate_unit(leaves[0].get_string_value().lower()):
-                    return True
-                else:
-                    return False
+                return bool(validate_unit(leaves[0].get_string_value().lower()))
             else:
                 if isinstance(leaves[0], Number):
-                    if validate_unit(leaves[1].get_string_value().lower()):
-                        return True
-                    else:
-                        return False
+                    return bool(validate_unit(leaves[1].get_string_value().lower()))
                 else:
                     return False
 
@@ -313,10 +305,7 @@ class QuantityUnit(Builtin):
         "QuantityUnit[expr_]"
 
         def get_unit(leaves):
-            if len(leaves) == 1:
-                return leaves[0]
-            else:
-                return leaves[1]
+            return leaves[0] if len(leaves) == 1 else leaves[1]
 
         if len(evaluation.out) > 0:
             return
@@ -373,10 +362,7 @@ class QuantityMagnitude(Builtin):
         "QuantityMagnitude[expr_]"
 
         def get_magnitude(leaves):
-            if len(leaves) == 1:
-                return 1
-            else:
-                return leaves[0]
+            return 1 if len(leaves) == 1 else leaves[0]
 
         if len(evaluation.out) > 0:
             return
@@ -397,10 +383,7 @@ class QuantityMagnitude(Builtin):
             q_mag = converted_quantity.magnitude.evaluate(evaluation).get_float_value()
 
             # Displaying the magnitude in Integer form if the convert rate is an Integer
-            if q_mag - int(q_mag) > 0:
-                return Real(q_mag)
-            else:
-                return Integer(q_mag)
+            return Real(q_mag) if q_mag - int(q_mag) > 0 else Integer(q_mag)
 
         if len(evaluation.out) > 0:
             return

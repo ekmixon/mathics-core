@@ -27,17 +27,14 @@ class UniformPolyhedron3DBox(InstanceableBuiltin):
         self.sub_type = item.leaves[0].to_python(string_quotes=False)
 
     def extent(self):
-        result = []
-
-        # TODO: correct extent calculation, the current one is approximated
-        result.extend(
-            [
-                coords.add(self.edge_length, self.edge_length, self.edge_length).pos()[
-                    0
-                ]
-                for coords in self.points
+        result = [
+            coords.add(self.edge_length, self.edge_length, self.edge_length).pos()[
+                0
             ]
-        )
+            for coords in self.points
+        ]
+
+
         result.extend(
             [
                 coords.add(

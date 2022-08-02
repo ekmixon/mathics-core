@@ -34,10 +34,10 @@ def get_default_distance(p):
         return "SquaredEuclideanDistance"
     elif all(q.get_head_name() == "System`List" for q in p):
         dimensions = [get_dimensions(q) for q in p]
-        if len(dimensions) < 1:
+        if not dimensions:
             return None
         d0 = dimensions[0]
-        if not all(d == d0 for d in dimensions[1:]):
+        if any(d != d0 for d in dimensions[1:]):
             return None
         if len(dimensions[0]) == 1:  # vectors?
 
@@ -64,20 +64,18 @@ def get_default_distance(p):
 def get_dimensions(expr, head=None):
     if isinstance(expr, Atom):
         return []
-    else:
-        if head is not None and not expr.head.sameQ(head):
-            return []
-        sub_dim = None
-        sub = []
-        for leaf in expr.leaves:
-            sub = get_dimensions(leaf, expr.head)
-            if sub_dim is None:
-                sub_dim = sub
-            else:
-                if sub_dim != sub:
-                    sub = []
-                    break
-        return [len(expr.leaves)] + sub
+    if head is not None and not expr.head.sameQ(head):
+        return []
+    sub_dim = None
+    sub = []
+    for leaf in expr.leaves:
+        sub = get_dimensions(leaf, expr.head)
+        if sub_dim is None:
+            sub_dim = sub
+        elif sub_dim != sub:
+            sub = []
+            break
+    return [len(expr.leaves)] + sub
 
 
 class ArrayDepth(Builtin):
@@ -163,9 +161,11 @@ class ArrayQ(Builtin):
             return SymbolFalse
 
         depth = len(dims) - 1  # None doesn't count
-        if not pattern.does_match(Integer(depth), evaluation):
-            return SymbolFalse
-        return SymbolTrue
+        return (
+            SymbolTrue
+            if pattern.does_match(Integer(depth), evaluation)
+            else SymbolFalse
+        )
 
 
 class Dimensions(Builtin):
@@ -383,15 +383,16 @@ class Outer(Builtin):
         def rec(item, rest_lists, current):
             evaluation.check_stopped()
             if isinstance(item, Atom) or not item.head.sameQ(head):
-                if rest_lists:
-                    return rec(rest_lists[0], rest_lists[1:], current + [item])
-                else:
-                    return Expression(f, *(current + [item]))
-            else:
-                leaves = []
-                for leaf in item.leaves:
-                    leaves.append(rec(leaf, rest_lists, current))
-                return Expression(head, *leaves)
+                return (
+                    rec(rest_lists[0], rest_lists[1:], current + [item])
+                    if rest_lists
+                    else Expression(f, *(current + [item]))
+                )
+
+            leaves = []
+            for leaf in item.leaves:
+                leaves.append(rec(leaf, rest_lists, current))
+            return Expression(head, *leaves)
 
         return rec(lists[0], lists[1:], [])
 

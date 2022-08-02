@@ -225,15 +225,11 @@ class ColorData(Builtin):
 
 
 def extract_pyreal(value):
-    if isinstance(value, Real):
-        return chop(value).round_to_float()
-    return None
+    return chop(value).round_to_float() if isinstance(value, Real) else None
 
 
 def zero_to_one(value):
-    if value == 0:
-        return 1
-    return value
+    return 1 if value == 0 else value
 
 
 def compile_quiet_function(expr, arg_names, evaluation, expect_list):
@@ -253,7 +249,7 @@ def compile_quiet_function(expr, arg_names, evaluation, expect_list):
             def quiet_f(*args):
                 try:
                     result = cfunc(*args)
-                    if not (isnan(result) or isinf(result)):
+                    if not isnan(result) and not isinf(result):
                         return result
                 except:
                     pass
@@ -275,16 +271,12 @@ def compile_quiet_function(expr, arg_names, evaluation, expect_list):
         if expect_list:
             if value.has_form("List", None):
                 value = [extract_pyreal(item) for item in value.leaves]
-                if any(item is None for item in value):
-                    return None
-                return value
+                return None if any(item is None for item in value) else value
             else:
                 return None
         else:
             value = extract_pyreal(value)
-            if value is None or isinf(value) or isnan(value):
-                return None
-            return value
+            return None if value is None or isinf(value) or isnan(value) else value
 
     return quiet_f
 
@@ -298,15 +290,16 @@ def automatic_plot_range(values):
     if not values:
         return 0, 1
 
-    thresh = 2.0
     values = sorted(values)
     valavg = sum(values) / len(values)
     valdev = sqrt(
-        sum([(x - valavg) ** 2 for x in values]) / zero_to_one(len(values) - 1)
+        sum((x - valavg) ** 2 for x in values) / zero_to_one(len(values) - 1)
     )
+
 
     n1, n2 = 0, len(values) - 1
     if valdev != 0:
+        thresh = 2.0
         for v in values:
             if abs(v - valavg) / valdev < thresh:
                 break
@@ -326,19 +319,14 @@ def get_plot_range(values, all_values, option):
     if option == "System`Automatic":
         result = automatic_plot_range(values)
     elif option == "System`All":
-        if not all_values:
-            result = [0, 1]
-        else:
-            result = min(all_values), max(all_values)
+        result = (min(all_values), max(all_values)) if all_values else [0, 1]
     else:
         result = option
     if result[0] == result[1]:
         value = result[0]
         if value > 0:
             return 0, value * 2
-        if value < 0:
-            return value * 2, 0
-        return -1, 1
+        return (value * 2, 0) if value < 0 else (-1, 1)
     return result
 
 

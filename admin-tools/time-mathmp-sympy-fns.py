@@ -50,7 +50,7 @@ for sympy_fn, mpmath_fn, fn_name in (
     (sympy_e, mpmath_e, "e"),
     (sympy_degree, mpmath_degree, "degree"),
 ):
-    print(fn_name + ":")
+    print(f"{fn_name}:")
     print(timeit(mpmath_fn, number=ITERATIONS), "seconds for mpmath")
     print(timeit(sympy_fn, number=ITERATIONS), "seconds for sympy")
     print("\n", mpmath_fn(), "\n", sympy_fn())

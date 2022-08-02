@@ -175,16 +175,12 @@ class _DateFormat(Builtin):
                 is_ambiguous = False
             else:
                 month_day = "%m %d"
-                is_ambiguous = not (i2 > 12 or i1 == i2)  # is i2 not clearly a day?
+                is_ambiguous = i2 <= 12 and i1 != i2
 
             if len(x3) <= 2:
-                date = datetime.strptime(
-                    "%02d %02d %02d" % (i1, i2, i3), month_day + " %y"
-                )
+                date = datetime.strptime("%02d %02d %02d" % (i1, i2, i3), f"{month_day} %y")
             else:
-                date = datetime.strptime(
-                    "%02d %02d %04d" % (i1, i2, i3), month_day + " %Y"
-                )
+                date = datetime.strptime("%02d %02d %04d" % (i1, i2, i3), f"{month_day} %Y")
         elif len(x1) == 4:
             is_ambiguous = False
             date = datetime.strptime("%04d %02d %02d" % (i1, i2, i3), "%Y %m %d")

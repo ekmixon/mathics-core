@@ -371,10 +371,11 @@ class Delete(Builtin):
 
         # Create new python list of the positions and sort it
         positions = (
-            [t for t in positions.leaves]
+            list(positions.leaves)
             if positions.leaves[0].has_form("List", None)
             else [positions]
         )
+
         positions.sort(key=lambda e: e.get_sort_key(pattern_sort=True))
         newexpr = expr
         for position in positions:
@@ -383,7 +384,7 @@ class Delete(Builtin):
                 return evaluation.message(
                     "Delete", "psl", position.leaves[pos.index(None)], expr
                 )
-            if len(pos) == 0:
+            if not pos:
                 return evaluation.message(
                     "Delete", "psl", Expression(SymbolList, *positions), expr
                 )
@@ -620,10 +621,7 @@ def list_boxes(items, f, open=None, close=None):
         result = Expression("RowBox", Expression(SymbolList, *result))
     elif items:
         result = result[0]
-    if result:
-        result = [result]
-    else:
-        result = []
+    result = [result] if result else []
     if open is not None and close is not None:
         return [String(open)] + result + [String(close)]
     else:
@@ -748,7 +746,7 @@ class SplitBy(Builtin):
             evaluation.message("Select", "normal", 1, expr)
             return
 
-        plist = [t for t in mlist.leaves]
+        plist = list(mlist.leaves)
 
         result = [[plist[0]]]
         prev = Expression(func, plist[0]).evaluate(evaluation)
@@ -926,11 +924,10 @@ class _IterationFunction(Builtin):
             if len(leaves) == 1:
                 return self.apply_max(expr, *leaves, evaluation)
             elif len(leaves) == 2:
-                if leaves[1].has_form(["List", "Sequence"], None):
-                    seq = Expression(SymbolSequence, *(leaves[1].leaves))
-                    return self.apply_list(expr, leaves[0], seq, evaluation)
-                else:
+                if not leaves[1].has_form(["List", "Sequence"], None):
                     return self.apply_range(expr, *leaves, evaluation)
+                seq = Expression(SymbolSequence, *(leaves[1].leaves))
+                return self.apply_list(expr, leaves[0], seq, evaluation)
             elif len(leaves) == 3:
                 return self.apply_iter_nostep(expr, *leaves, evaluation)
             elif len(leaves) == 4:
@@ -973,9 +970,7 @@ class _IterationFunction(Builtin):
             try:
                 result.append(expr.evaluate(evaluation))
             except ContinueInterrupt:
-                if self.allow_loopcontrol:
-                    pass
-                else:
+                if not self.allow_loopcontrol:
                     raise
             except BreakInterrupt:
                 if self.allow_loopcontrol:
@@ -1038,9 +1033,7 @@ class _IterationFunction(Builtin):
                 item = dynamic_scoping(expr.evaluate, {i.name: index}, evaluation)
                 result.append(item)
             except ContinueInterrupt:
-                if self.allow_loopcontrol:
-                    pass
-                else:
+                if not self.allow_loopcontrol:
                     raise
             except BreakInterrupt:
                 if self.allow_loopcontrol:
@@ -1065,9 +1058,7 @@ class _IterationFunction(Builtin):
                 item = dynamic_scoping(expr.evaluate, {i.name: item}, evaluation)
                 result.append(item)
             except ContinueInterrupt:
-                if self.allow_loopcontrol:
-                    pass
-                else:
+                if not self.allow_loopcontrol:
                     raise
             except BreakInterrupt:
                 if self.allow_loopcontrol:
@@ -1218,10 +1209,7 @@ class UnitVector(Builtin):
             return
 
         def item(i):
-            if i == k:
-                return Integer(1)
-            else:
-                return Integer0
+            return Integer(1) if i == k else Integer0
 
         return Expression(SymbolList, *(item(i) for i in range(1, n + 1)))
 
@@ -1414,70 +1402,65 @@ class _RankedTake(Builtin):
 
         if limit == 0:
             return Expression(SymbolList)
-        else:
-            excluded = self.get_option(options, "ExcludedForms", evaluation)
-            if excluded:
-                if (
-                    isinstance(excluded, Symbol)
-                    and excluded.get_name() == "System`Automatic"
-                ):
+        excluded = self.get_option(options, "ExcludedForms", evaluation)
+        if excluded:
+            if (
+                isinstance(excluded, Symbol)
+                and excluded.get_name() == "System`Automatic"
+            ):
 
-                    def exclude(item):
-                        if isinstance(item, Symbol) and item.get_name() in (
-                            "System`None",
-                            "System`Null",
-                            "System`Indeterminate",
-                        ):
-                            return True
-                        elif item.get_head_name() == "System`Missing":
-                            return True
-                        else:
-                            return False
+                def exclude(item):
+                    if isinstance(item, Symbol) and item.get_name() in (
+                        "System`None",
+                        "System`Null",
+                        "System`Indeterminate",
+                    ):
+                        return True
+                    elif item.get_head_name() == "System`Missing":
+                        return True
+                    else:
+                        return False
 
-                else:
-                    excluded = Expression("Alternatives", *excluded.leaves)
-
-                    def exclude(item):
-                        return (
-                            Expression("MatchQ", item, excluded)
-                            .evaluate(evaluation)
-                            .is_true()
-                        )
-
-                filtered = [leaf for leaf in t.leaves if not exclude(leaf)]
             else:
-                filtered = t.leaves
+                excluded = Expression("Alternatives", *excluded.leaves)
 
-            if limit > len(filtered):
-                if not limit.is_upper_limit():
-                    evaluation.message(
-                        self.get_name(), "rank", limit.get_int_value(), len(filtered)
+                def exclude(item):
+                    return (
+                        Expression("MatchQ", item, excluded)
+                        .evaluate(evaluation)
+                        .is_true()
                     )
-                    return
-                else:
-                    py_n = len(filtered)
+
+            filtered = [leaf for leaf in t.leaves if not exclude(leaf)]
+        else:
+            filtered = t.leaves
+
+        if limit > len(filtered):
+            if not limit.is_upper_limit():
+                evaluation.message(
+                    self.get_name(), "rank", limit.get_int_value(), len(filtered)
+                )
+                return
             else:
-                py_n = limit.get_int_value()
+                py_n = len(filtered)
+        else:
+            py_n = limit.get_int_value()
 
-            if py_n < 1:
-                return Expression(SymbolList)
+        if py_n < 1:
+            return Expression(SymbolList)
 
-            if f:
-                heap = [
-                    (Expression(f, leaf).evaluate(evaluation), leaf, i)
-                    for i, leaf in enumerate(filtered)
-                ]
-                leaf_pos = 1  # in tuple above
-            else:
-                heap = [(leaf, i) for i, leaf in enumerate(filtered)]
-                leaf_pos = 0  # in tuple above
+        if f:
+            heap = [
+                (Expression(f, leaf).evaluate(evaluation), leaf, i)
+                for i, leaf in enumerate(filtered)
+            ]
+            leaf_pos = 1  # in tuple above
+        else:
+            heap = [(leaf, i) for i, leaf in enumerate(filtered)]
+            leaf_pos = 0  # in tuple above
 
-            if py_n == 1:
-                result = [self._get_1(heap)]
-            else:
-                result = self._get_n(py_n, heap)
-
-            return t.restructure("List", [x[leaf_pos] for x in result], evaluation)
+        result = [self._get_1(heap)] if py_n == 1 else self._get_n(py_n, heap)
+        return t.restructure("List", [x[leaf_pos] for x in result], evaluation)
 
 
 class _RankedTakeSmallest(_RankedTake):
@@ -1642,10 +1625,7 @@ class _Pad(Builtin):
 
         def clip(a, d, s):
             assert d != 0
-            if s < 0:
-                return a[-d:]  # end with a[-1]
-            else:
-                return a[:d]  # start with a[0]
+            return a[-d:] if s < 0 else a[:d]
 
         def padding(amount, sign):
             if amount == 0:
@@ -1713,11 +1693,7 @@ class _Pad(Builtin):
             evaluation.message(self.get_name(), "ilsm", 2, expr())
             return
 
-        if in_x.get_head_name() == "System`List":
-            py_x = in_x.leaves
-        else:
-            py_x = [in_x]
-
+        py_x = in_x.leaves if in_x.get_head_name() == "System`List" else [in_x]
         if isinstance(in_m, Integer):
             py_m = in_m.get_int_value()
         else:
@@ -1731,10 +1707,7 @@ class _Pad(Builtin):
         except _IllegalPaddingDepth as e:
 
             def levels(k):
-                if k == 1:
-                    return "1 level"
-                else:
-                    return "%d levels" % k
+                return "1 level" if k == 1 else "%d levels" % k
 
             evaluation.message(
                 self.get_name(),
@@ -2047,18 +2020,13 @@ class _Cluster(Builtin):
         elif mode == "components":
             return Expression(SymbolList, *clusters)
         else:
-            raise ValueError("illegal mode %s" % mode)
+            raise ValueError(f"illegal mode {mode}")
 
     def _agglomerate(self, mode, repr_p, dist_p, py_k, df, evaluation):
-        if mode == "clusters":
+        if mode in ["clusters", "components"]:
             clusters = agglomerate(
                 repr_p, py_k, _PrecomputedDistances(df, dist_p, evaluation), mode
             )
-        elif mode == "components":
-            clusters = agglomerate(
-                repr_p, py_k, _PrecomputedDistances(df, dist_p, evaluation), mode
-            )
-
         return clusters
 
     def _kmeans(self, mode, repr_p, dist_p, py_k, py_seed, evaluation):
@@ -2352,10 +2320,12 @@ class Nearest(Builtin):
             return Expression(SymbolList, *list(pick()))
 
         try:
-            if not multiple_x:
-                return nearest(pivot)
-            else:
-                return Expression(SymbolList, *[nearest(t) for t in pivot.leaves])
+            return (
+                Expression(SymbolList, *[nearest(t) for t in pivot.leaves])
+                if multiple_x
+                else nearest(pivot)
+            )
+
         except _IllegalDistance:
             return SymbolFailed
         except ValueError:
@@ -2455,10 +2425,7 @@ def delete_one(expr, pos):
         return Expression(SymbolSequence, *leaves)
     s = len(leaves)
     truepos = pos
-    if truepos < 0:
-        truepos = s + truepos
-    else:
-        truepos = truepos - 1
+    truepos = s + truepos if truepos < 0 else truepos - 1
     if truepos < 0 or truepos >= s:
         raise PartRangeError
     leaves = leaves[:truepos] + (Expression("System`Sequence"),) + leaves[truepos + 1 :]
@@ -2470,7 +2437,7 @@ def delete_rec(expr, pos):
         return delete_one(expr, pos[0])
     truepos = pos[0]
     if truepos == 0 or isinstance(expr, Atom):
-        raise PartDepthError(pos[0])
+        raise PartDepthError(truepos)
     leaves = expr.leaves
     s = len(leaves)
     if truepos < 0:

@@ -89,10 +89,7 @@ def grayscale_to_rgb(g, *rest):
 
 @conditional
 def _inverse_compand_srgb(x):
-    if x > 0.04045:
-        return ((x + 0.055) / 1.055) ** 2.4
-    else:
-        return x / 12.92
+    return ((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92
 
 
 def rgb_to_xyz(r, g, b, *rest):
@@ -103,10 +100,7 @@ def rgb_to_xyz(r, g, b, *rest):
 
 @conditional
 def _compute_hsb_s(m1, c, eps):
-    if m1 < eps:
-        return 0
-    else:
-        return c / m1
+    return 0 if m1 < eps else c / m1
 
 
 @conditional
@@ -123,10 +117,7 @@ def _compute_hsb_h(m1, c, eps, r, g, b):
 
 @conditional
 def _wrap_hsb_h(h):
-    if h < 0.0:
-        return h + 1.0
-    else:
-        return h
+    return h + 1.0 if h < 0.0 else h
 
 
 def rgb_to_hsb(r, g, b, *rest):
@@ -176,10 +167,7 @@ def cmyk_to_rgb(c, m, y, *rest):
 
 @conditional
 def _scale_rgb_to_cmyk(t, k, k_, eps):
-    if k_ < eps:
-        return 0
-    else:
-        return (1 - t - k) / k_
+    return 0 if k_ < eps else (1 - t - k) / k_
 
 
 def rgb_to_cmyk(r, g, b, *rest):
@@ -191,10 +179,7 @@ def rgb_to_cmyk(r, g, b, *rest):
 
 @conditional
 def _compand_srgb(t):
-    if t > 0.0031308:
-        return 1.055 * (t ** (1.0 / 2.4)) - 0.055
-    else:
-        return t * 12.92
+    return 1.055 * (t ** (1.0 / 2.4)) - 0.055 if t > 0.0031308 else t * 12.92
 
 
 def xyz_to_rgb(x, y, z, *rest):
@@ -207,10 +192,7 @@ def xyz_to_rgb(x, y, z, *rest):
 
 @conditional
 def _scale_xyz_to_lab(t):
-    if t > 0.008856:
-        return t ** 0.33333333  # MMA specific
-    else:
-        return (903.3 * t + 16.0) / 116.0
+    return t ** 0.33333333 if t > 0.008856 else (903.3 * t + 16.0) / 116.0
 
 
 def xyz_to_lab(x, y, z, *rest):
@@ -224,10 +206,7 @@ def xyz_to_lab(x, y, z, *rest):
 
 @conditional
 def _xyz_to_luv_scale_y(y):
-    if y > 0.008856:
-        return 116.0 * (y ** (1.0 / 3.0)) - 16
-    else:
-        return 903.3 * y
+    return 116.0 * (y ** (1.0 / 3.0)) - 16 if y > 0.008856 else 903.3 * y
 
 
 def xyz_to_luv(x, y, z, *rest):
@@ -253,18 +232,12 @@ def xyz_to_luv(x, y, z, *rest):
 
 @conditional
 def _scale_lab_to_xyz(t):
-    if t > 0.2068930:  # 0.008856 ** (1/3)
-        return t ** 3
-    else:
-        return (t - 16.0 / 116.0) / 7.787
+    return t ** 3 if t > 0.2068930 else (t - 16.0 / 116.0) / 7.787
 
 
 @conditional
 def _luv_to_xyz_clip_zero(cie_l_is_zero, t):
-    if cie_l_is_zero:
-        return 0
-    else:
-        return t
+    return 0 if cie_l_is_zero else t
 
 
 def luv_to_xyz(cie_l, cie_u, cie_v, *rest):
@@ -293,10 +266,7 @@ def lch_to_lab(l, c, h, *rest):
 
 @conditional
 def _wrap_lch_h(h, pi2):
-    if h < 0.0:
-        return h + pi2
-    else:
-        return h
+    return h + pi2 if h < 0.0 else h
 
 
 def lab_to_lch(l, a, b, *rest):
@@ -443,7 +413,7 @@ def convert_color(components, src, dst, preserve_alpha=True):
         return None
 
     for s, d in zip(path[:-1], path[1:]):
-        func = conversions.get("%s>%s" % (s, d))
+        func = conversions.get(f"{s}>{d}")
         if not func:
             return None
         components = stacked(func, components)

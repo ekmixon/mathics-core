@@ -48,14 +48,11 @@ def get_option(options, name, evaluation, pop=False, evaluate=True):
     # variants name the same option. this matches Wolfram Language
     # behaviour.
     name = strip_context(name)
-    contexts = (s + "%s" for s in evaluation.definitions.get_context_path())
+    contexts = (f"{s}%s" for s in evaluation.definitions.get_context_path())
 
     for variant in chain(contexts, ('"%s"',)):
         resolved_name = variant % name
-        if pop:
-            value = options.pop(resolved_name, None)
-        else:
-            value = options.get(resolved_name)
+        value = options.pop(resolved_name, None) if pop else options.get(resolved_name)
         if value is not None:
             return value.evaluate(evaluation) if evaluate else value
     return None
@@ -135,24 +132,14 @@ class Builtin:
     defaults = {}
 
     def __new__(cls, *args, **kwargs):
-        # comment @mmatera:
-        # The goal of this method is to allow to build expressions
-        # like ``Expression(SymbolList,x,y,z)``
-        # in the handy way  ``List(x,y,z)``.
-        # This is handy, but can be confusing if this is not very
-        # well documented.
-        # Notice that this behavior was used extensively in
-        # mathics.builtin.inout
-
         if kwargs.get("expression", None) is not False:
             return Expression(cls.get_name(), *args)
-        else:
-            instance = super().__new__(cls)
-            if not instance.formats:
-                # Reset formats so that not every instance shares the same
-                # empty dict {}
-                instance.formats = {}
-            return instance
+        instance = super().__new__(cls)
+        if not instance.formats:
+            # Reset formats so that not every instance shares the same
+            # empty dict {}
+            instance.formats = {}
+        return instance
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -176,12 +163,8 @@ class Builtin:
                 continue
             option = ensure_context(option)
             options[option] = parse_builtin_rule(value)
-            if option.startswith("System`"):
-                # Create a definition for the option's symbol.
-                # Otherwise it'll be created in Global` when it's
-                # used, so it won't work.
-                if option not in definitions.builtin:
-                    definitions.builtin[option] = Definition(name=name)
+            if option.startswith("System`") and option not in definitions.builtin:
+                definitions.builtin[option] = Definition(name=name)
 
         # Check if the given options are actually supported by the Builtin.
         # If not, we might issue an optx error and abort. Using '$OptionSyntax'
@@ -212,9 +195,7 @@ class Builtin:
         elif option_syntax in ("Ignore", "System`Ignore"):
             check_options = None
         else:
-            raise ValueError(
-                "illegal option mode %s; check $OptionSyntax." % option_syntax
-            )
+            raise ValueError(f"illegal option mode {option_syntax}; check $OptionSyntax.")
 
         rules = []
         definition_class = (
@@ -311,12 +292,8 @@ class Builtin:
         for option, value in self.options.items():
             option = ensure_context(option)
             options[option] = parse_builtin_rule(value)
-            if option.startswith("System`"):
-                # Create a definition for the option's symbol.
-                # Otherwise it'll be created in Global` when it's
-                # used, so it won't work.
-                if option not in definitions.builtin:
-                    definitions.builtin[option] = Definition(name=name)
+            if option.startswith("System`") and option not in definitions.builtin:
+                definitions.builtin[option] = Definition(name=name)
         defaults = []
         for spec, value in self.defaults.items():
             value = parse_builtin_rule(value)
@@ -350,13 +327,8 @@ class Builtin:
 
     @classmethod
     def get_name(cls, short=False) -> str:
-        if cls.name is None:
-            shortname = cls.__name__
-        else:
-            shortname = cls.name
-        if short:
-            return shortname
-        return cls.context + shortname
+        shortname = cls.__name__ if cls.name is None else cls.name
+        return shortname if short else cls.context + shortname
 
     def get_operator(self) -> typing.Optional[str]:
         return None
@@ -520,9 +492,7 @@ class SympyObject(Builtin):
         return False
 
     def get_sympy_names(self) -> typing.List[str]:
-        if self.sympy_name:
-            return [self.sympy_name]
-        return []
+        return [self.sympy_name] if self.sympy_name else []
 
 
 class UnaryOperator(Operator):
@@ -530,9 +500,9 @@ class UnaryOperator(Operator):
         super().__init__(*args, **kwargs)
         name = self.get_name()
         if self.needs_verbatim:
-            name = "Verbatim[%s]" % name
+            name = f"Verbatim[{name}]"
         if self.default_formats:
-            op_pattern = "%s[item_]" % name
+            op_pattern = f"{name}[item_]"
             if op_pattern not in self.formats:
                 operator = self.get_operator_display()
                 if operator is not None:
@@ -562,17 +532,17 @@ class BinaryOperator(Operator):
         name = self.get_name()
         # Prevent pattern matching symbols from gaining meaning here using
         # Verbatim
-        name = "Verbatim[%s]" % name
+        name = f"Verbatim[{name}]"
 
         # For compatibility, allow grouping symbols in builtins to be
         # specified without System`.
         self.grouping = ensure_context(self.grouping)
 
         if self.grouping in ("System`None", "System`NonAssociative"):
-            op_pattern = "%s[items__]" % name
+            op_pattern = f"{name}[items__]"
             replace_items = "items"
         else:
-            op_pattern = "%s[x_, y_]" % name
+            op_pattern = f"{name}[x_, y_]"
             replace_items = "x, y"
 
         if self.default_formats:
@@ -597,15 +567,14 @@ class BinaryOperator(Operator):
                     op_pattern
                 ): formatted_output,
             }
-            default_rules.update(self.rules)
+            default_rules |= self.rules
             self.rules = default_rules
 
 
 class Test(Builtin):
     def apply(self, expr, evaluation) -> Symbol:
         "%(name)s[expr_]"
-        tst = self.test(expr)
-        if tst:
+        if tst := self.test(expr):
             return SymbolTrue
         elif tst is False:
             return SymbolFalse
@@ -633,16 +602,13 @@ class SympyFunction(SympyObject):
             return
 
         sympy_fn = self.to_sympy()
-        if d is None:
-            result = self.get_mpmath_function() if have_mpmath else sympy_fn()
-            return MachineReal(result)
-        else:
+        if d is not None:
             return PrecisionReal(sympy_fn.n(d))
+        result = self.get_mpmath_function() if have_mpmath else sympy_fn()
+        return MachineReal(result)
 
     def get_sympy_function(self, leaves=None):
-        if self.sympy_name:
-            return getattr(sympy, self.sympy_name)
-        return None
+        return getattr(sympy, self.sympy_name) if self.sympy_name else None
 
     def prepare_sympy(self, leaves):
         return leaves
@@ -703,19 +669,14 @@ class BoxConstruct(InstanceableBuiltin):
         if len(tex) == 1:
             return tex
         else:
-            if not only_subsup or "_" in tex or "^" in tex:
-                return "{%s}" % tex
-            else:
-                return tex
+            return "{%s}" % tex if not only_subsup or "_" in tex or "^" in tex else tex
 
     def to_expression(self):
-        expr = Expression(self.get_name(), self._elements)
-        return expr
+        return Expression(self.get_name(), self._elements)
 
     def replace_vars(self, vars, options=None, in_scoping=True, in_function=True):
         expr = self.to_expression()
-        result = expr.replace_vars(vars, options, in_scoping, in_function)
-        return result
+        return expr.replace_vars(vars, options, in_scoping, in_function)
 
     def evaluate(self, evaluation):
         # THINK about: Should we evaluate the elements here?
@@ -731,7 +692,7 @@ class BoxConstruct(InstanceableBuiltin):
         return self.get_name()
 
     def get_string_value(self):
-        return "-@" + self.get_head_name() + "@-"
+        return f"-@{self.get_head_name()}@-"
 
     def sameQ(self, expr) -> bool:
         """Mathics SameQ"""
@@ -742,8 +703,7 @@ class BoxConstruct(InstanceableBuiltin):
 
     def format(self, evaluation, fmt):
         expr = Expression("HoldForm", self.to_expression())
-        fexpr = expr.format(evaluation, fmt)
-        return fexpr
+        return expr.format(evaluation, fmt)
 
     def get_head(self):
         return Symbol(self.get_name())
@@ -779,30 +739,26 @@ class BoxConstruct(InstanceableBuiltin):
         if isinstance(heads, (tuple, list, set)):
             if head_name not in [ensure_context(h) for h in heads]:
                 return False
-        else:
-            if head_name != ensure_context(heads):
-                return False
+        elif head_name != ensure_context(heads):
+            return False
         if not element_counts:
             return False
-        if element_counts and element_counts[0] is not None:
+        if element_counts[0] is not None:
             count = len(self._elements)
             if count not in element_counts:
-                if (
+                return (
                     len(element_counts) == 2
-                    and element_counts[1] is None  # noqa
+                    and element_counts[1] is None
                     and count >= element_counts[0]
-                ):
-                    return True
-                else:
-                    return False
+                )
+
         return True
 
     def flatten_pattern_sequence(self, evaluation) -> "BoxConstruct":
         return self
 
     def get_option_values(self, leaves, **options):
-        evaluation = options.get("evaluation", None)
-        if evaluation:
+        if evaluation := options.get("evaluation", None):
             default = evaluation.definitions.get_options(self.get_name()).copy()
             options = Expression("List", *leaves).get_option_values(evaluation)
             default.update(options)
@@ -845,9 +801,8 @@ class PatternObject(InstanceableBuiltin, Pattern):
 
     def init(self, expr):
         super().init(expr)
-        if self.arg_counts is not None:
-            if len(expr.leaves) not in self.arg_counts:
-                self.error_args(len(expr.leaves), *self.arg_counts)
+        if self.arg_counts is not None and len(expr.leaves) not in self.arg_counts:
+            self.error_args(len(expr.leaves), *self.arg_counts)
         self.expr = expr
         self.head = Pattern.create(expr.head)
         self.leaves = [Pattern.create(leaf) for leaf in expr.leaves]
@@ -966,22 +921,22 @@ class CountableInteger:
         elif expr.get_head_name() == "System`UpTo":
             if len(expr.leaves) != 1:
                 raise MessageException("UpTo", "argx", len(expr.leaves))
-            else:
-                n = expr.leaves[0]
-                if isinstance(n, Integer):
-                    py_n = n.get_int_value()
-                    if py_n < 0:
-                        raise MessageException("UpTo", "innf", expr)
-                    else:
-                        return CountableInteger(py_n, upper_limit=True)
-                elif CountableInteger._support_infinity:
-                    if (
+            n = expr.leaves[0]
+            if isinstance(n, Integer):
+                py_n = n.get_int_value()
+                if py_n < 0:
+                    raise MessageException("UpTo", "innf", expr)
+                else:
+                    return CountableInteger(py_n, upper_limit=True)
+            elif CountableInteger._support_infinity:
+                if (
                         n.get_head_name() == "System`DirectedInfinity"
                         and len(n.leaves) == 1
                     ):
-                        if n.leaves[0].get_int_value() > 0:
-                            return CountableInteger("Infinity", upper_limit=True)
-                        else:
-                            return CountableInteger(0, upper_limit=True)
+                    return (
+                        CountableInteger("Infinity", upper_limit=True)
+                        if n.leaves[0].get_int_value() > 0
+                        else CountableInteger(0, upper_limit=True)
+                    )
 
         return None  # leave original expression unevaluated

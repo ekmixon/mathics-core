@@ -86,10 +86,9 @@ class Blend(Builtin):
         for color in colors:
             if type is None:
                 type = color.__class__
-            else:
-                if color.__class__ != type:
-                    homogenous = False
-                    break
+            elif color.__class__ != type:
+                homogenous = False
+                break
         if not homogenous:
             colors = [RGBColor(components=color.to_rgba()) for color in colors]
             type = RGBColor
@@ -98,10 +97,7 @@ class Blend(Builtin):
         for color, value in zip(colors, values):
             frac = value / total
             part = [component * frac for component in color.components]
-            if result is None:
-                result = part
-            else:
-                result = [r + p for r, p in zip(result, part)]
+            result = part if result is None else [r + p for r, p in zip(result, part)]
         return type(components=result)
 
     def apply(self, colors, u, evaluation):
@@ -139,14 +135,14 @@ class Blend(Builtin):
 
         if use_list:
             return self.do_blend(colors, values).to_expr()
-        else:
-            x = values
-            pos = int(floor(x * (len(colors) - 1)))
-            x = (x - pos * 1.0 / (len(colors) - 1)) * (len(colors) - 1)
-            if pos == len(colors) - 1:
-                return colors[-1].to_expr()
-            else:
-                return self.do_blend(colors[pos : (pos + 2)], [1 - x, x]).to_expr()
+        x = values
+        pos = int(floor(x * (len(colors) - 1)))
+        x = (x - pos * 1.0 / (len(colors) - 1)) * (len(colors) - 1)
+        return (
+            colors[-1].to_expr()
+            if pos == len(colors) - 1
+            else self.do_blend(colors[pos : (pos + 2)], [1 - x, x]).to_expr()
+        )
 
 
 class ColorConvert(Builtin):
@@ -179,27 +175,26 @@ class ColorConvert(Builtin):
 
         if isinstance(input, Image):
             return input.color_convert(colorspace.get_string_value())
-        else:
-            from mathics.builtin.colors.color_directives import (
-                expression_to_color,
-                color_to_expression,
-            )
+        from mathics.builtin.colors.color_directives import (
+            expression_to_color,
+            color_to_expression,
+        )
 
-            py_color = expression_to_color(input)
-            if py_color is None:
-                evaluation.message("ColorConvert", "ccvinput", input)
-                return
+        py_color = expression_to_color(input)
+        if py_color is None:
+            evaluation.message("ColorConvert", "ccvinput", input)
+            return
 
-            py_colorspace = colorspace.get_string_value()
-            converted_components = convert_color(
-                py_color.components, py_color.color_space, py_colorspace
-            )
+        py_colorspace = colorspace.get_string_value()
+        converted_components = convert_color(
+            py_color.components, py_color.color_space, py_colorspace
+        )
 
-            if converted_components is None:
-                evaluation.message("ColorConvert", "imgcstype", colorspace)
-                return
+        if converted_components is None:
+            evaluation.message("ColorConvert", "imgcstype", colorspace)
+            return
 
-            return color_to_expression(converted_components, py_colorspace)
+        return color_to_expression(converted_components, py_colorspace)
 
 
 class ColorNegate(_ImageBuiltin):

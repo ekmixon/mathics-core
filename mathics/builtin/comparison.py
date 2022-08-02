@@ -158,28 +158,21 @@ class _EqualityOperator(_InequalityOperator):
         if not is_number(rhs_sympy):
             rhs_sympy = mp_convert_constant(rhs_sympy, prec=COMPARE_PREC)
 
-        # WL's interpretation of Equal[] which allows for slop in Reals
-        # in the least significant digit of precision, while for Integers, comparison
-        # has to be exact.
-
-        if lhs_sympy.is_number and rhs_sympy.is_number:
-            # assert min_prec(lhs, rhs) is None
-            if max_extra_prec:
-                prec = max_extra_prec
-            else:
-                prec = COMPARE_PREC
-            lhs = lhs_sympy.n(dps(prec))
-            rhs = rhs_sympy.n(dps(prec))
-            if lhs == rhs:
-                return True
-            tol = 10 ** (-prec)
-            diff = abs(lhs - rhs)
-            if isinstance(diff, sympy.core.add.Add):
-                return sympy.re(diff) < tol
-            else:
-                return diff < tol
-        else:
+        if not lhs_sympy.is_number or not rhs_sympy.is_number:
             return None
+            # assert min_prec(lhs, rhs) is None
+        prec = max_extra_prec or COMPARE_PREC
+        lhs = lhs_sympy.n(dps(prec))
+        rhs = rhs_sympy.n(dps(prec))
+        if lhs == rhs:
+            return True
+        tol = 10 ** (-prec)
+        diff = abs(lhs - rhs)
+        return (
+            sympy.re(diff) < tol
+            if isinstance(diff, sympy.core.add.Add)
+            else diff < tol
+        )
 
     def equal2(self, lhs: Any, rhs: Any, max_extra_prec=None) -> Optional[bool]:
         """
@@ -211,7 +204,7 @@ class _EqualityOperator(_InequalityOperator):
             Expression("ExactNumberQ", arg).evaluate(evaluation)
             for arg in items_sequence
         ]
-        if not all(val is SymbolTrue for val in is_exact_vals):
+        if any(val is not SymbolTrue for val in is_exact_vals):
             return self.apply_other(items, evaluation)
         args = self.numerify_args(items, evaluation)
         for x, y in self.get_pairs(args):
@@ -353,10 +346,7 @@ class UnsameQ(BinaryOperator):
     def apply(self, lhs, rhs, evaluation):
         "lhs_ =!= rhs_"
 
-        if lhs.sameQ(rhs):
-            return SymbolFalse
-        else:
-            return SymbolTrue
+        return SymbolFalse if lhs.sameQ(rhs) else SymbolTrue
 
 
 class TrueQ(Builtin):
@@ -474,10 +464,6 @@ def do_cplx_equal(x, y) -> Optional[int]:
             c = do_cmp(x.imag, y.imag)
             if c is None:
                 return
-            if c != 0:
-                return False
-            else:
-                return True
         else:
             c = do_cmp(x.imag, Integer0)
             if c is None:
@@ -487,14 +473,9 @@ def do_cplx_equal(x, y) -> Optional[int]:
             c = do_cmp(x.real, y.real)
             if c is None:
                 return
-            if c != 0:
-                return False
-            else:
-                return True
+        return c == 0
     c = do_cmp(x, y)
-    if c is None:
-        return None
-    return c == 0
+    return None if c is None else c == 0
 
 
 def do_cmp(x1, x2) -> Optional[int]:
@@ -517,19 +498,13 @@ def do_cmp(x1, x2) -> Optional[int]:
     if s1.is_Float and s2.is_Float:
         if x1 == x2:
             return 0
-        if x1 < x2:
-            return -1
-        return 1
-
+        return -1 if x1 < x2 else 1
     # we don't want to compare anything that
     # cannot be represented as a numeric value
     if s1.is_number and s2.is_number:
         if s1 == s2:
             return 0
-        if s1 < s2:
-            return -1
-        return 1
-
+        return -1 if s1 < s2 else 1
     return None
 
 
@@ -964,10 +939,7 @@ class _MinMax(Builtin):
         best = None
 
         for item in items:
-            if item.has_form("List", None):
-                leaves = item.leaves
-            else:
-                leaves = [item]
+            leaves = item.leaves if item.has_form("List", None) else [item]
             for leaf in leaves:
                 if best is None:
                     best = leaf

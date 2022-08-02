@@ -205,12 +205,17 @@ def parenthesize(precedence, leaf, leaf_boxes, when_equal):
         leaf_prec = leaf.leaves[1].get_int_value()
     else:
         leaf_prec = builtins_precedence.get(leaf.get_head_name())
-    if precedence is not None and leaf_prec is not None:
-        if precedence > leaf_prec or (precedence == leaf_prec and when_equal):
-            return Expression(
-                SymbolRowBox,
-                Expression(SymbolList, String("("), leaf_boxes, String(")")),
-            )
+    if (
+        precedence is not None
+        and leaf_prec is not None
+        and (
+            precedence > leaf_prec or (precedence == leaf_prec and when_equal)
+        )
+    ):
+        return Expression(
+            SymbolRowBox,
+            Expression(SymbolList, String("("), leaf_boxes, String(")")),
+        )
     return leaf_boxes
 
 
@@ -220,13 +225,14 @@ def make_boxes_infix(leaves, ops, precedence, grouping, form):
         if index > 0:
             result.append(ops[index - 1])
         parenthesized = False
-        if grouping == "System`NonAssociative":
+        if (
+            grouping == "System`NonAssociative"
+            or grouping == "System`Left"
+            and index > 0
+            or grouping == "System`Right"
+            and index == 0
+        ):
             parenthesized = True
-        elif grouping == "System`Left" and index > 0:
-            parenthesized = True
-        elif grouping == "System`Right" and index == 0:
-            parenthesized = True
-
         leaf_boxes = MakeBoxes(leaf, form)
         leaf = parenthesize(precedence, leaf, leaf_boxes, parenthesized)
 
@@ -412,7 +418,7 @@ def number_form(expr, n, f, evaluation, options):
         left_padding = n - l
     elif len(sign_prefix) < max_sign_len:
         left_padding = max_sign_len - len(sign_prefix)
-    left_padding = left_padding * options["NumberPadding"][0]
+    left_padding *= options["NumberPadding"][0]
 
     # insert NumberPoint
     if options["SignPadding"]:
@@ -420,11 +426,7 @@ def number_form(expr, n, f, evaluation, options):
     else:
         prefix = left_padding + sign_prefix
 
-    if is_int:
-        s = prefix + left
-    else:
-        s = prefix + left + options["NumberPoint"] + right
-
+    s = prefix + left if is_int else prefix + left + options["NumberPoint"] + right
     # base
     base = "10"
 
@@ -589,41 +591,39 @@ class MakeBoxes(Builtin):
 
         if isinstance(expr, Atom):
             return expr.atom_to_boxes(f, evaluation)
-        else:
-            head = expr.head
-            leaves = expr.leaves
+        head = expr.head
+        leaves = expr.leaves
 
-            f_name = f.get_name()
-            if f_name == "System`TraditionalForm":
-                left, right = "(", ")"
-            else:
-                left, right = "[", "]"
+        f_name = f.get_name()
+        left, right = ("(", ")") if f_name == "System`TraditionalForm" else ("[", "]")
+        # Parenthesize infix operators at the head of expressions,
+        # like (a + b)[x], but not f[a] in f[a][b].
+        #
+        head_boxes = parenthesize(670, head, MakeBoxes(head, f), False)
+        result = [head_boxes, String(left)]
 
-            # Parenthesize infix operators at the head of expressions,
-            # like (a + b)[x], but not f[a] in f[a][b].
-            #
-            head_boxes = parenthesize(670, head, MakeBoxes(head, f), False)
-            result = [head_boxes, String(left)]
-
-            if len(leaves) > 1:
-                row = []
-                if f_name in (
+        if len(leaves) > 1:
+            row = []
+            sep = (
+                ", "
+                if f_name
+                in (
                     "System`InputForm",
                     "System`OutputForm",
                     "System`FullForm",
-                ):
-                    sep = ", "
-                else:
-                    sep = ","
-                for index, leaf in enumerate(leaves):
-                    if index > 0:
-                        row.append(String(sep))
-                    row.append(MakeBoxes(leaf, f))
-                result.append(RowBox(Expression(SymbolList, *row)))
-            elif len(leaves) == 1:
-                result.append(MakeBoxes(leaves[0], f))
-            result.append(String(right))
-            return RowBox(Expression(SymbolList, *result))
+                )
+                else ","
+            )
+
+            for index, leaf in enumerate(leaves):
+                if index > 0:
+                    row.append(String(sep))
+                row.append(MakeBoxes(leaf, f))
+            result.append(RowBox(Expression(SymbolList, *row)))
+        elif len(leaves) == 1:
+            result.append(MakeBoxes(leaves[0], f))
+        result.append(String(right))
+        return RowBox(Expression(SymbolList, *result))
 
     def apply_outerprecedenceform(self, expr, prec, evaluation):
         """MakeBoxes[OuterPrecedenceForm[expr_, prec_],
@@ -643,18 +643,13 @@ class MakeBoxes(Builtin):
         precedence = prec.get_int_value()
 
         elements = expr.get_elements()
-        if len(elements) == 1:
-            leaf = elements[0]
-            leaf_boxes = MakeBoxes(leaf, f)
-            leaf = parenthesize(precedence, leaf, leaf_boxes, True)
-            if p.get_name() == "System`Postfix":
-                args = (leaf, h)
-            else:
-                args = (h, leaf)
-
-            return Expression(SymbolRowBox, Expression(SymbolList, *args))
-        else:
+        if len(elements) != 1:
             return MakeBoxes(expr, f)
+        leaf = elements[0]
+        leaf_boxes = MakeBoxes(leaf, f)
+        leaf = parenthesize(precedence, leaf, leaf_boxes, True)
+        args = (leaf, h) if p.get_name() == "System`Postfix" else (h, leaf)
+        return Expression(SymbolRowBox, Expression(SymbolList, *args))
 
     def apply_infix(self, expr, h, prec, grouping, f, evaluation):
         """MakeBoxes[Infix[expr_, h_, prec_:None, grouping_:None],
@@ -672,7 +667,7 @@ class MakeBoxes(Builtin):
                     and not op_value.startswith(" ")
                     and not op_value.endswith(" ")
                 ):
-                    op = String(" " + op_value + " ")
+                    op = String(f" {op_value} ")
             return op
 
         precedence = prec.get_int_value()
@@ -714,8 +709,7 @@ class ToBoxes(Builtin):
         form_name = form.get_name()
         if form_name is None:
             evaluation.message("ToBoxes", "boxfmt", form)
-        boxes = expr.format(evaluation, form_name)
-        return boxes
+        return expr.format(evaluation, form_name)
 
 
 class BoxData(Builtin):
@@ -755,20 +749,17 @@ class Row(Builtin):
             sep = MakeBoxes(sep, f)
         if len(items) == 1:
             return MakeBoxes(items[0], f)
-        else:
-            result = []
-            for index, item in enumerate(items):
-                if index > 0 and not sep.sameQ(String("")):
-                    result.append(sep)
-                result.append(MakeBoxes(item, f))
-            return RowBox(Expression(SymbolList, *result))
+        result = []
+        for index, item in enumerate(items):
+            if index > 0 and not sep.sameQ(String("")):
+                result.append(sep)
+            result.append(MakeBoxes(item, f))
+        return RowBox(Expression(SymbolList, *result))
 
 
 # Right now this seems to be used only in GridBox.
 def is_constant_list(list):
-    if list:
-        return all(item == list[0] for item in list[1:])
-    return True
+    return all(item == list[0] for item in list[1:]) if list else True
 
 
 # TODO: Inheritance of options["ColumnAlignments"] prevents us from
@@ -803,9 +794,10 @@ class GridBox(BoxConstruct):
         if not leaves:
             raise BoxConstructError
         expr = leaves[0]
-        if not expr.has_form("List", None):
-            if not all(leaf.has_form("List", None) for leaf in expr.leaves):
-                raise BoxConstructError
+        if not expr.has_form("List", None) and not all(
+            leaf.has_form("List", None) for leaf in expr.leaves
+        ):
+            raise BoxConstructError
         items = [leaf.leaves for leaf in expr.leaves]
         if not is_constant_list([len(row) for row in items]):
             raise BoxConstructError
@@ -1029,10 +1021,7 @@ class TableForm(Builtin):
             new_depth = Expression(SymbolRule, SymbolTableDepth, depth - 2)
 
             def transform_item(item):
-                if depth > 2:
-                    return Expression(self.get_name(), item, new_depth)
-                else:
-                    return item
+                return Expression(self.get_name(), item, new_depth) if depth > 2 else item
 
             return GridBox(
                 Expression(
@@ -1298,10 +1287,7 @@ class StringForm(Builtin):
         last_index = 0
         for match in re.finditer(r"(\`(\d*)\`)", s):
             start, end = match.span(1)
-            if match.group(2):
-                index = int(match.group(2))
-            else:
-                index = last_index + 1
+            index = int(match.group(2)) if match.group(2) else last_index + 1
             if index > last_index:
                 last_index = index
             if start > pos:
@@ -2100,15 +2086,14 @@ class MathMLForm(Builtin):
                 Expression(SymbolFullForm, boxes).evaluate(evaluation),
             )
             mathml = ""
-        is_a_picture = mathml[:6] == "<mtext"
+        is_a_picture = mathml.startswith("<mtext")
 
         # mathml = '<math><mstyle displaystyle="true">%s</mstyle></math>' % mathml
         # #convert_box(boxes)
         query = evaluation.parse("Settings`$UseSansSerif")
         usesansserif = query.evaluate(evaluation).to_python()
-        if not is_a_picture:
-            if isinstance(usesansserif, bool) and usesansserif:
-                mathml = '<mstyle mathvariant="sans-serif">%s</mstyle>' % mathml
+        if not is_a_picture and isinstance(usesansserif, bool) and usesansserif:
+            mathml = '<mstyle mathvariant="sans-serif">%s</mstyle>' % mathml
 
         mathml = '<math display="block">%s</math>' % mathml  # convert_box(boxes)
         return Expression(SymbolRowBox, Expression(SymbolList, String(mathml)))
@@ -2292,8 +2277,8 @@ class _NumberForm(Builtin):
         """
         result = {}
         for option_name in self.options:
-            method = getattr(self, "check_" + option_name)
-            arg = options["System`" + option_name]
+            method = getattr(self, f"check_{option_name}")
+            arg = options[f"System`{option_name}"]
             value = method(arg, evaluation)
             if value is None:
                 return None
@@ -2629,15 +2614,11 @@ class NumberForm(_NumberForm):
     @staticmethod
     def default_ExponentFunction(value):
         n = value.get_int_value()
-        if -5 <= n <= 5:
-            return SymbolNull
-        else:
-            return value
+        return SymbolNull if -5 <= n <= 5 else value
 
     @staticmethod
     def default_NumberFormat(man, base, exp, options):
-        py_exp = exp.get_string_value()
-        if py_exp:
+        if py_exp := exp.get_string_value():
             mul = String(options["NumberMultiplier"])
             return Expression(
                 SymbolRowBox,
@@ -2688,10 +2669,7 @@ class NumberForm(_NumberForm):
         if isinstance(expr, Integer):
             py_n = len(str(abs(expr.get_int_value())))
         elif isinstance(expr, Real):
-            if expr.is_machine_precision():
-                py_n = 6
-            else:
-                py_n = dps(expr.get_precision())
+            py_n = 6 if expr.is_machine_precision() else dps(expr.get_precision())
         else:
             py_n = None
 

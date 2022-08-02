@@ -21,10 +21,13 @@ from typing import Callable
 
 
 def traced_do_replace(self, expression, vars, options, evaluation):
-    if options and self.check_options:
-        if not self.check_options(options, evaluation):
-            return None
-    vars_noctx = dict(((strip_context(s), vars[s]) for s in vars))
+    if (
+        options
+        and self.check_options
+        and not self.check_options(options, evaluation)
+    ):
+        return None
+    vars_noctx = {strip_context(s): vars[s] for s in vars}
     if self.pass_expression:
         vars_noctx["expression"] = expression
     builtin_name = self.function.__qualname__.split(".")[0]

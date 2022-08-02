@@ -34,9 +34,7 @@ def load_element_data():
         print(os.path.join(datadir, "data/element.csv"), "  not found.")
         return None
     reader = csvreader(element_file, delimiter="\t")
-    element_data = []
-    for row in reader:
-        element_data.append([value for value in row])
+    element_data = [list(row) for row in reader]
     element_file.close()
     return element_data
 
@@ -151,23 +149,24 @@ class ElementData(Builtin):
             py_prop = prop.to_python()
 
             # Check element specifier n or "name"
-            if isinstance(py_n, int):
-                if not 1 <= py_n <= 118:
-                    evaluation.message("ElementData", "noent", expr)
-                    return
-            else:
+            if (
+                isinstance(py_n, int)
+                and not 1 <= py_n <= 118
+                or not isinstance(py_n, int)
+            ):
                 evaluation.message("ElementData", "noent", expr)
                 return
-
             # Check property specifier
             if isinstance(py_prop, str):
                 py_prop = str(py_prop)
 
             if py_prop == '"Properties"':
-                result = []
-                for i, p in enumerate(_ELEMENT_DATA[py_n]):
-                    if p not in ["NOT_AVAILABLE", "NOT_APPLICABLE", "NOT_KNOWN"]:
-                        result.append(_ELEMENT_DATA[0][i])
+                result = [
+                    _ELEMENT_DATA[0][i]
+                    for i, p in enumerate(_ELEMENT_DATA[py_n])
+                    if p not in ["NOT_AVAILABLE", "NOT_APPLICABLE", "NOT_KNOWN"]
+                ]
+
                 return from_python(sorted(result))
 
             if not (

@@ -21,26 +21,24 @@ def _median3(a, b, c, index_a, index_b, index_c):
             return index_c  # a < c <= b
         else:
             return index_a  # c <= a < b
-    else:  # b <= a
-        if c < b:
-            return index_b  # c < b <= a
-        elif c < a:
-            return index_c  # b <= c < a
-        else:
-            return index_a  # b <= a <= c
+    elif c < b:
+        return index_b  # c < b <= a
+    elif c < a:
+        return index_c  # b <= c < a
+    else:
+        return index_a  # b <= a <= c
 
 
 def _median5(v):  # for len(v) <= 5
     n = len(v)
 
-    if n != 5:
-        if n == 3:
-            return _median3(v[0], v[1], v[2], 0, 1, 2)
-        elif n == 4:
-            return sorted([(x, i) for i, x in enumerate(v)])[n // 2][1]
-        else:
-            assert 0 < n < 3
-            return 0
+    if n == 3:
+        return _median3(v[0], v[1], v[2], 0, 1, 2)
+    elif n == 4:
+        return sorted([(x, i) for i, x in enumerate(v)])[n // 2][1]
+    elif n != 5:
+        assert 0 < n < 3
+        return 0
 
     # we compute "sts", the second-to-smallest value in (a, b, c, d), and "stl", the
     # second-to-largest value in (a, b, c, d). we then compute median5(a, b, c, d, e)
@@ -60,16 +58,17 @@ def _median5(v):  # for len(v) <= 5
         c, d = d, c
         index_c, index_d = index_d, index_c
 
-    if a > c:  # second to smallest = a
-        if b < d:  # second to largest = b
-            return _median3(a, b, e, index_a, index_b, index_e)
-        else:  # second to largest = d
-            return _median3(a, d, e, index_a, index_d, index_e)
-    else:  # second to smallest = c
-        if b < d:  # second to largest = b
-            return _median3(c, b, e, index_c, index_b, index_e)
-        else:  # second to largest = d
-            return _median3(c, d, e, index_c, index_d, index_e)
+    if a > c:
+        return (
+            _median3(a, b, e, index_a, index_b, index_e)
+            if b < d
+            else _median3(a, d, e, index_a, index_d, index_e)
+        )
+
+    if b < d:  # second to largest = b
+        return _median3(c, b, e, index_c, index_b, index_e)
+    else:  # second to largest = d
+        return _median3(c, d, e, index_c, index_d, index_e)
 
 
 def _partition(a, f):
@@ -158,10 +157,7 @@ def introselect(a, k):  # changes a
 
         depth -= 1
 
-    if depth <= 0 and len(a) > 3:
-        return bfprt(a, k)
-    else:
-        return sorted(a)[k]
+    return bfprt(a, k) if depth <= 0 and len(a) > 3 else sorted(a)[k]
 
 
 if __name__ == "__main__":
@@ -185,11 +181,10 @@ if __name__ == "__main__":
             if not test_algorithm(l, r_max, "bfprt", bfprt):
                 return False
 
-        for l in range(l_max):
-            if not test_algorithm(l, r_max, "introselect", introselect):
-                return False
-
-        return True
+        return all(
+            test_algorithm(l, r_max, "introselect", introselect)
+            for l in range(l_max)
+        )
 
     def test_range(l_max):
         # we test two cases: many same elements, and few same elements.

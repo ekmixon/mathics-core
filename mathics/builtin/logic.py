@@ -60,10 +60,7 @@ class Or(BinaryOperator):
             elif result != SymbolFalse:
                 leaves.append(result)
         if leaves:
-            if len(leaves) == 1:
-                return leaves[0]
-            else:
-                return Expression("Or", *leaves)
+            return leaves[0] if len(leaves) == 1 else Expression("Or", *leaves)
         else:
             return SymbolFalse
 
@@ -109,10 +106,7 @@ class And(BinaryOperator):
             elif not result.is_true():
                 leaves.append(result)
         if leaves:
-            if len(leaves) == 1:
-                return leaves[0]
-            else:
-                return Expression("And", *leaves)
+            return leaves[0] if len(leaves) == 1 else Expression("And", *leaves)
         else:
             return SymbolTrue
 
@@ -250,7 +244,7 @@ class Equivalent(BinaryOperator):
 
         args = args.get_sequence()
         argc = len(args)
-        if argc == 0 or argc == 1:
+        if argc in {0, 1}:
             return SymbolTrue
         flag = False
         for arg in args:
@@ -317,11 +311,8 @@ class Xor(BinaryOperator):
             elif result != SymbolFalse:
                 leaves.append(result)
         if leaves and flag:
-            if len(leaves) == 1:
-                return leaves[0]
-            else:
-                return Expression("Xor", *leaves)
-        elif leaves and not flag:
+            return leaves[0] if len(leaves) == 1 else Expression("Xor", *leaves)
+        elif leaves:
             if len(leaves) == 1:
                 return Expression("Not", leaves[0])
             else:

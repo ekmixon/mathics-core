@@ -55,7 +55,7 @@ from mathics.core.attributes import (
 
 @lru_cache(maxsize=1024)
 def log_n_b(py_n, py_b) -> int:
-    return int(mpmath.ceil(mpmath.log(py_n, py_b))) if py_n != 0 and py_n != 1 else 1
+    return int(mpmath.ceil(mpmath.log(py_n, py_b))) if py_n not in [0, 1] else 1
 
 
 def check_finite_decimal(denominator):
@@ -66,11 +66,11 @@ def check_finite_decimal(denominator):
     while denominator % 2 == 0:
         denominator = denominator / 2
 
-    return True if denominator == 1 else False
+    return denominator == 1
 
 
 def convert_repeating_decimal(numerator, denominator, base):
-    head = [x for x in str(numerator // denominator)]
+    head = list(str(numerator // denominator))
     tails = []
     subresults = [numerator % denominator]
     numerator %= denominator
@@ -88,15 +88,14 @@ def convert_repeating_decimal(numerator, denominator, base):
         j = len(tails) - 1
         if head[i] != tails[j]:
             break
-        else:
-            del tails[j]
-            tails.insert(0, head[i])
-            del head[i]
-            j = j - 1
+        del tails[j]
+        tails.insert(0, head[i])
+        del head[i]
+        j = j - 1
 
     # truncate all leading 0's
     if all(elem == "0" for elem in head):
-        for i in range(0, len(tails)):
+        for _ in range(len(tails)):
             if tails[0] == "0":
                 tails = tails[1:] + [str(0)]
             else:
@@ -111,7 +110,7 @@ def convert_float_base(x, base, precision=10):
 
     def convert_int(x, base, exponents):
         out = []
-        for e in range(0, exponents + 1):
+        for e in range(exponents + 1):
             d = x % base
             out.append(d)
             x = x / base
@@ -122,7 +121,7 @@ def convert_float_base(x, base, precision=10):
 
     def convert_float(x, base, exponents):
         out = []
-        for e in range(0, exponents):
+        for e in range(exponents):
             d = int(x * base)
             out.append(d)
             x = (x * base) - d
@@ -217,10 +216,11 @@ class IntegerDigits(Builtin):
     def apply_len(self, n, base, length, evaluation):
         "IntegerDigits[n_, base_, length_]"
 
-        if not (isinstance(length, Integer) and length.get_int_value() >= 0):
-            return evaluation.message("IntegerDigits", "intnn")
-
-        return self.apply(n, base, evaluation, nr_elements=length.get_int_value())
+        return (
+            self.apply(n, base, evaluation, nr_elements=length.get_int_value())
+            if (isinstance(length, Integer) and length.get_int_value() >= 0)
+            else evaluation.message("IntegerDigits", "intnn")
+        )
 
     def apply(self, n, base, evaluation, nr_elements=None):
         "IntegerDigits[n_, base_]"
@@ -549,18 +549,14 @@ class RealDigits(Builtin):
         py_b = b.get_int_value()
         if check_finite_decimal(n.denominator().get_int_value()) and not py_b % 2:
             return self.apply_with_base(n, b, evaluation)
-        else:
-            exp = int(mpmath.ceil(mpmath.log(py_n, py_b)))
-            (head, tails) = convert_repeating_decimal(
-                py_n.as_numer_denom()[0], py_n.as_numer_denom()[1], py_b
-            )
+        exp = int(mpmath.ceil(mpmath.log(py_n, py_b)))
+        (head, tails) = convert_repeating_decimal(
+            py_n.as_numer_denom()[0], py_n.as_numer_denom()[1], py_b
+        )
 
-            leaves = []
-            for x in head:
-                if x != "0":
-                    leaves.append(Integer(int(x)))
-            leaves.append(from_python(tails))
-            list_str = Expression(SymbolList, *leaves)
+        leaves = [Integer(int(x)) for x in head if x != "0"]
+        leaves.append(from_python(tails))
+        list_str = Expression(SymbolList, *leaves)
         return Expression(SymbolList, list_str, exp)
 
     def apply_rational_without_base(self, n, evaluation):
@@ -582,9 +578,7 @@ class RealDigits(Builtin):
         "%(name)s[n_?NumericQ, b_Integer]"
 
         expr = Expression("RealDigits", n)
-        rational_no = (
-            True if isinstance(n, Rational) else False
-        )  # it is used for checking whether the input n is a rational or not
+        rational_no = isinstance(n, Rational)
         py_b = b.get_int_value()
         if isinstance(n, (Expression, Symbol, Rational)):
             pos_len = abs(pos) + 1 if pos is not None and pos < 0 else 1
@@ -592,14 +586,13 @@ class RealDigits(Builtin):
                 n = Expression(
                     "N", n, int(mpmath.log(py_b ** (nr_elements + pos_len), 10)) + 1
                 ).evaluate(evaluation)
+            elif rational_no:
+                n = apply_N(n, evaluation)
             else:
-                if rational_no:
-                    n = apply_N(n, evaluation)
-                else:
-                    return evaluation.message("RealDigits", "ndig", expr)
+                return evaluation.message("RealDigits", "ndig", expr)
         py_n = abs(n.value)
 
-        if not py_b > 1:
+        if py_b <= 1:
             return evaluation.message("RealDigits", "rbase", py_b)
 
         if isinstance(py_n, complex):
@@ -608,9 +601,10 @@ class RealDigits(Builtin):
         if isinstance(n, Integer):
             display_len = (
                 int(mpmath.floor(mpmath.log(py_n, py_b)))
-                if py_n != 0 and py_n != 1
+                if py_n not in [0, 1]
                 else 1
             )
+
         else:
             display_len = int(
                 Expression(
@@ -634,7 +628,7 @@ class RealDigits(Builtin):
             exp = 0
 
         digits = []
-        if not py_b == 10:
+        if py_b != 10:
             digits = convert_float_base(py_n, py_b, display_len - exp)
             # truncate all the leading 0's
             i = 0
@@ -642,9 +636,8 @@ class RealDigits(Builtin):
                 i += 1
             digits = digits[i:]
 
-            if not isinstance(n, Integer):
-                if len(digits) > display_len:
-                    digits = digits[: display_len - 1]
+            if not isinstance(n, Integer) and len(digits) > display_len:
+                digits = digits[: display_len - 1]
         else:
             # drop any leading zeroes
             for x in str(py_n):
@@ -659,11 +652,11 @@ class RealDigits(Builtin):
                 digits = [0] * abs(move) + digits
             else:
                 digits = digits[abs(move) :]
-                display_len = display_len - move
+                display_len -= move
 
         leaves = []
         for x in digits:
-            if x == "e" or x == "E":
+            if x in ["e", "E"]:
                 break
             # Convert to Mathics' list format
             leaves.append(Integer(int(x)))
@@ -677,14 +670,13 @@ class RealDigits(Builtin):
             if len(leaves) >= nr_elements:
                 # Truncate, preserving the digits on the right
                 leaves = leaves[:nr_elements]
+            elif isinstance(n, Integer):
+                while len(leaves) < nr_elements:
+                    leaves.append(Integer0)
             else:
-                if isinstance(n, Integer):
-                    while len(leaves) < nr_elements:
-                        leaves.append(Integer0)
-                else:
-                    # Adding Indeterminate if the length is greater than the precision
-                    while len(leaves) < nr_elements:
-                        leaves.append(from_python(Symbol("Indeterminate")))
+                # Adding Indeterminate if the length is greater than the precision
+                while len(leaves) < nr_elements:
+                    leaves.append(from_python(Symbol("Indeterminate")))
         list_str = Expression(SymbolList, *leaves)
         return Expression(SymbolList, list_str, exp)
 
@@ -694,22 +686,24 @@ class RealDigits(Builtin):
         if pos is not None:
             leaves.append(from_python(pos))
         expr = Expression("RealDigits", n, b, length, *leaves)
-        if not (isinstance(length, Integer) and length.get_int_value() >= 0):
-            return evaluation.message("RealDigits", "intnm", expr)
-
-        return self.apply_with_base(
-            n, b, evaluation, nr_elements=length.get_int_value(), pos=pos
+        return (
+            self.apply_with_base(
+                n, b, evaluation, nr_elements=length.get_int_value(), pos=pos
+            )
+            if (isinstance(length, Integer) and length.get_int_value() >= 0)
+            else evaluation.message("RealDigits", "intnm", expr)
         )
 
     def apply_with_base_length_and_precision(self, n, b, length, p, evaluation):
         "%(name)s[n_?NumericQ, b_Integer, length_, p_]"
-        if not isinstance(p, Integer):
-            return evaluation.message(
+        return (
+            self.apply_with_base_and_length(
+                n, b, length, evaluation, pos=p.get_int_value()
+            )
+            if isinstance(p, Integer)
+            else evaluation.message(
                 "RealDigits", "intm", Expression("RealDigits", n, b, length, p)
             )
-
-        return self.apply_with_base_and_length(
-            n, b, length, evaluation, pos=p.get_int_value()
         )
 
 

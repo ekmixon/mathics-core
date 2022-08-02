@@ -35,10 +35,7 @@ def get_class(symbol: Symbol):
     Symbol `symbol`
     """
     c = GLOBALS.get(symbol)
-    if c is None:
-        return GLOBALS3D.get(symbol)
-    else:
-        return c
+    return GLOBALS3D.get(symbol) if c is None else c
 
     # globals() does not work with Cython, otherwise one could use something
     # like return globals().get(name)

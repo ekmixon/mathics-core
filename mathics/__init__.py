@@ -14,8 +14,10 @@ version_info = {
     "sympy": sympy.__version__,
     "mpmath": mpmath.__version__,
     "numpy": numpy.__version__,
-    "python": platform.python_implementation() + " " + sys.version.split("\n")[0],
+    "python": f"{platform.python_implementation()} "
+    + sys.version.split("\n")[0],
 }
+
 
 try:
     import cython

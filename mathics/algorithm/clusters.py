@@ -182,7 +182,7 @@ def _shuffled_range(n):
     # performs surprisingly well even if all random numbers are retrieved. getting all available numbers from
     # shuffled_range(10^7) only takes only 70% longer than generating just the raw 10 million random numbers.
 
-    a = dict()
+    a = {}
 
     def nth(k):
         return a.get(k, k)
@@ -233,10 +233,7 @@ def _unmapped(u, v, distance):
         min_d = None
         min_i = None
         for i, vv in enumerate(v):
-            if uu == vv:
-                d = 0
-            else:
-                d = distance(uu, vv)
+            d = 0 if uu == vv else distance(uu, vv)
             if min_d is None or d < min_d:
                 min_d = d
                 min_i = i
@@ -336,8 +333,7 @@ class ApproximateSilhouetteSplitCriterion(SplitCriterion):
         def other_members(i):
             for j, c in enumerate(clusters):
                 if i != j:
-                    for p in c.members:
-                        yield p
+                    yield from c.members
 
         other = other_medoids  # fast version
 
@@ -566,7 +562,7 @@ class _Clusterer:
         max_neighbours = min(max(0.0125 * k * (n - k), 250), k * (n - k))
 
         min_cost_medoids = None
-        for i in range(num_local):
+        for _ in range(num_local):
             medoids = _Medoids(self, k)
 
             self.debug("new local %f" % medoids.cost())
@@ -615,22 +611,21 @@ class _Clusterer:
 
         if not split:
             return [[i_to_i0[i] for i in range(n)]]
-        else:
-            r = []
-            for i, c in enumerate(clusters):
-                t = clusters0[i].members
-                d = clusters0[1 - i]
+        r = []
+        for i, c in enumerate(clusters):
+            t = clusters0[i].members
+            d = clusters0[1 - i]
 
-                sub = _Clusterer(
-                    len(t),
-                    t,
-                    clusters0[i].medoid,
-                    self._siblings + [d],
-                    self._p0,
-                    self._d0,
-                )
-                r.extend(sub.without_k(new_criterion))
-            return r
+            sub = _Clusterer(
+                len(t),
+                t,
+                clusters0[i].medoid,
+                self._siblings + [d],
+                self._p0,
+                self._d0,
+            )
+            r.extend(sub.without_k(new_criterion))
+        return r
 
 
 def optimize(p, k, distances, mode="clusters", seed=12345, granularity=1.0):
@@ -664,7 +659,7 @@ def optimize(p, k, distances, mode="clusters", seed=12345, granularity=1.0):
         elif mode == "components":
             return _components(clusters, len(p))
         else:
-            raise ValueError("illegal mode %s" % mode)
+            raise ValueError(f"illegal mode {mode}")
     finally:
         random.setstate(random_state)
 
@@ -764,7 +759,7 @@ def agglomerate(points_and_weights, k, distances, mode="clusters"):
 
     if mode == "dominant":
         points, weight_ = points_and_weights
-        weight = [x for x in weight_]
+        weight = list(weight_)
     else:
         points = points_and_weights
 
@@ -803,10 +798,7 @@ def agglomerate(points_and_weights, k, distances, mode="clusters"):
 
         x, p, _ = xp = heap[i]
 
-        while j >= 0:
-            if heap[j] <= xp:
-                break
-
+        while j >= 0 and not heap[j] <= xp:
             xx, pp, _ = heap[i] = heap[j]
             where[pp] = i
 
@@ -875,7 +867,7 @@ def agglomerate(points_and_weights, k, distances, mode="clusters"):
         lookup = [(i, j) for i in range(n) for j in range(i)]
 
         where = list(range(len(triangular_distance_matrix)))
-        heap = [(d, z, u) for d, z, u in zip(triangular_distance_matrix, where, pairs)]
+        heap = list(zip(triangular_distance_matrix, where, pairs))
 
         for s in range(len(heap) // 2 - 1, -1, -1):  # ..., 1, 0
             shiftdown(s, heap, where)
@@ -924,9 +916,9 @@ def agglomerate(points_and_weights, k, distances, mode="clusters"):
                 )  # most weighted first
 
         else:
-            raise ValueError("illegal mode %s" % mode)
+            raise ValueError(f"illegal mode {mode}")
 
-        while len(heap) > 0 and n_clusters > n_clusters_target:
+        while heap and n_clusters > n_clusters_target:
             d, p, _ = heap[0]
 
             i, j = lookup[p]
@@ -1092,16 +1084,16 @@ class _KMeans:
                     xi = x[i]
                     u[i] = d(xi, c[ai])
 
-                    if u[i] > m:
-                        new_ai, u[i], _, l[i] = _smallest2(d(xi, cj) for cj in c)
+                if u[i] > m:
+                    new_ai, u[i], _, l[i] = _smallest2(d(xi, cj) for cj in c)
 
-                        if new_ai != ai:
-                            q[ai] -= 1
-                            q[new_ai] += 1
-                            cc[ai] = [a - b for a, b in zip(cc[ai], xi)]
-                            cc[new_ai] = [a + b for a, b in zip(cc[new_ai], xi)]
+                    if new_ai != ai:
+                        q[ai] -= 1
+                        q[new_ai] += 1
+                        cc[ai] = [a - b for a, b in zip(cc[ai], xi)]
+                        cc[new_ai] = [a + b for a, b in zip(cc[new_ai], xi)]
 
-                            a[i] = new_ai
+                        a[i] = new_ai
 
             # move centers
             empty_cluster = False
@@ -1124,11 +1116,7 @@ class _KMeans:
             r1, p1, r2, p2 = _largest2(p)
             for i, ai in enumerate(a):
                 u[i] += p[ai]
-                if r1 == ai:
-                    l[i] -= p2
-                else:
-                    l[i] -= p1
-
+                l[i] -= p2 if r1 == ai else p1
             change = sum(p)
 
         # compute an approximate silhouette index
@@ -1205,4 +1193,4 @@ def kmeans(x, x_repr, k, mode, seed, epsilon):
     elif mode == "components":
         return a
     else:
-        raise ValueError("illegal mode %s" % mode)
+        raise ValueError(f"illegal mode {mode}")

@@ -336,18 +336,21 @@ class Definition(Builtin):
                 )
             )
         if grid:
-            if lines:
-                return Expression(
+            return (
+                Expression(
                     "Grid",
-                    Expression("List", *(Expression("List", line) for line in lines)),
+                    Expression(
+                        "List", *(Expression("List", line) for line in lines)
+                    ),
                     Expression("Rule", Symbol("ColumnAlignments"), Symbol("Left")),
                 )
-            else:
-                return Symbol("Null")
-        else:
-            for line in lines:
-                evaluation.print_out(Expression("InputForm", line))
-            return Symbol("Null")
+                if lines
+                else Symbol("Null")
+            )
+
+        for line in lines:
+            evaluation.print_out(Expression("InputForm", line))
+        return Symbol("Null")
 
     def format_definition_input(self, symbol, evaluation):
         "InputForm: Definition[symbol_]"
@@ -577,8 +580,7 @@ class Information(PrefixOperator):
     def format_definition_input(self, symbol, evaluation, options):
         "InputForm: Information[symbol_, OptionsPattern[Information]]"
         self.format_definition(symbol, evaluation, options, grid=False)
-        ret = SymbolNull
-        return ret
+        return SymbolNull
 
 
 class Names(Builtin):
@@ -807,6 +809,4 @@ class ValueQ(Builtin):
     def apply(self, expr, evaluation):
         "ValueQ[expr_]"
         evaluated_expr = expr.evaluate(evaluation)
-        if expr.sameQ(evaluated_expr):
-            return SymbolFalse
-        return SymbolTrue
+        return SymbolFalse if expr.sameQ(evaluated_expr) else SymbolTrue

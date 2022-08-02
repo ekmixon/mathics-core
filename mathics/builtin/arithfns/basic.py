@@ -567,10 +567,7 @@ class Power(BinaryOperator, _MPMathFunction):
 
         # Power uses _MPMathFunction but does some error checking first
         if isinstance(x, Number) and x.is_zero:
-            if isinstance(y, Number):
-                y_err = y
-            else:
-                y_err = apply_N(y, evaluation)
+            y_err = y if isinstance(y, Number) else apply_N(y, evaluation)
             if isinstance(y_err, Number):
                 py_y = y_err.round_to_float(permit_complex=True).real
                 if py_y > 0:
@@ -810,10 +807,7 @@ class Times(BinaryOperator, SympyFunction):
             minus = False
         positive = [Expression(SymbolHoldForm, item) for item in positive]
         negative = [Expression(SymbolHoldForm, item) for item in negative]
-        if positive:
-            positive = create_infix(positive, op, 400, "None")
-        else:
-            positive = Integer1
+        positive = create_infix(positive, op, 400, "None") if positive else Integer1
         if negative:
             negative = create_infix(negative, op, 400, "None")
             result = Expression(
@@ -903,28 +897,25 @@ class Times(BinaryOperator, SympyFunction):
                 elements.append(item)
 
         if numbers:
-            if prec is not None:
-                if is_machine_precision:
-                    numbers = [item.to_mpmath() for item in numbers]
-                    number = mpmath.fprod(numbers)
-                    number = from_mpmath(number)
-                else:
-                    with mpmath.workprec(prec):
-                        numbers = [item.to_mpmath() for item in numbers]
-                        number = mpmath.fprod(numbers)
-                        number = from_mpmath(number, dps(prec))
-            else:
+            if prec is None:
                 number = sympy.Mul(*[item.to_sympy() for item in numbers])
                 number = from_sympy(number)
+            elif is_machine_precision:
+                numbers = [item.to_mpmath() for item in numbers]
+                number = mpmath.fprod(numbers)
+                number = from_mpmath(number)
+            else:
+                with mpmath.workprec(prec):
+                    numbers = [item.to_mpmath() for item in numbers]
+                    number = mpmath.fprod(numbers)
+                    number = from_mpmath(number, dps(prec))
         else:
             number = Integer1
 
         if number.sameQ(Integer1):
             number = None
         elif number.is_zero:
-            if infinity_factor:
-                return SymbolIndeterminate
-            return number
+            return SymbolIndeterminate if infinity_factor else number
         elif (
             number.sameQ(Integer(-1))
             and elements
@@ -943,15 +934,6 @@ class Times(BinaryOperator, SympyFunction):
             elements.insert(0, number)
 
         if not elements:
-            if infinity_factor:
-                return SymbolComplexInfinity
-            return Integer1
-
-        if len(elements) == 1:
-            ret = elements[0]
-        else:
-            ret = Expression(SymbolTimes, *elements)
-        if infinity_factor:
-            return Expression(SymbolDirectedInfinity, ret)
-        else:
-            return ret
+            return SymbolComplexInfinity if infinity_factor else Integer1
+        ret = elements[0] if len(elements) == 1 else Expression(SymbolTimes, *elements)
+        return Expression(SymbolDirectedInfinity, ret) if infinity_factor else ret

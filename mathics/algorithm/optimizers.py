@@ -56,10 +56,7 @@ def find_minimum_newton1d(f, x0, x, opts, evaluation) -> (Number, bool):
     eps = determine_epsilon(x0, opts, evaluation)
     if not isinstance(curr_val, Number):
         evaluation.message(symbol_name, "nnum", x, x0)
-        if is_find_maximum:
-            return -x0, False
-        else:
-            return x0, False
+        return (-x0, False) if is_find_maximum else (x0, False)
     d1 = dynamic_scoping(
         lambda ev: Expression("D", f, x).evaluate(ev), {x_name: None}, evaluation
     )
@@ -134,10 +131,7 @@ def find_minimum_newton1d(f, x0, x, opts, evaluation) -> (Number, bool):
                     symbol_name, "fmgz", String("minimum"), String("maximum")
                 )
 
-            if is_find_maximum:
-                return (x0, -curr_val), True
-            else:
-                return (x0, curr_val), True
+            return ((x0, -curr_val), True) if is_find_maximum else ((x0, curr_val), True)
         if val_d2.is_zero:
             val_d2 = Integer1
 
@@ -149,42 +143,29 @@ def find_minimum_newton1d(f, x0, x, opts, evaluation) -> (Number, bool):
             is SymbolTrue
         ):
             if is_zero(offset, acc_goal, prec_goal, evaluation):
-                if is_find_maximum:
-                    return (x1, -curr_val), True
-                else:
-                    return (x1, curr_val), True
+                return ((x1, -curr_val), True) if is_find_maximum else ((x1, curr_val), True)
             x0 = x1
             curr_val = new_val
         else:
             if is_zero(offset / Integer2, acc_goal, prec_goal, evaluation):
-                if is_find_maximum:
-                    return (x0, -curr_val), True
-                else:
-                    return (x0, curr_val), True
+                return ((x0, -curr_val), True) if is_find_maximum else ((x0, curr_val), True)
             x0, curr_val = reset_values(x0)
         val_d1, val_d2 = reevaluate_coeffs()
-        count = count + 1
+        count += 1
     else:
         evaluation.message(symbol_name, "maxiter")
-    if is_find_maximum:
-        return (x0, -curr_val), False
-    else:
-        return (x0, curr_val), False
+    return ((x0, -curr_val), False) if is_find_maximum else ((x0, curr_val), False)
 
 
 def find_root_secant(f, x0, x, opts, evaluation) -> (Number, bool):
     region = opts.get("$$Region", None)
-    if not type(region) is list:
+    if type(region) is not list:
         if x0.is_zero:
             region = (Real(-1), Real(1))
         else:
             xmax = 2 * x0.to_python()
             xmin = -2 * x0.to_python()
-            if xmin > xmax:
-                region = (Real(xmax), Real(xmin))
-            else:
-                region = (Real(xmin), Real(xmax))
-
+            region = (Real(xmax), Real(xmin)) if xmin > xmax else (Real(xmin), Real(xmax))
     maxit = opts["System`MaxIterations"]
     x_name = x.get_name()
     if maxit is SymbolAutomatic:
@@ -241,7 +222,7 @@ def find_root_secant(f, x0, x, opts, evaluation) -> (Number, bool):
         x1, x0 = x2, x1
         if x1 == x0 or abs(f2) == 0:
             break
-        count = count + 1
+        count += 1
     else:
         evaluation.message("FindRoot", "maxiter")
         return x0, False
@@ -270,14 +251,12 @@ def find_root_newton(f, x0, x, opts, evaluation) -> (Number, bool):
         """
         Check if val2 has a smaller absolute value than val1
         """
-        if not (val1.is_numeric() and val2.is_numeric()):
+        if not val1.is_numeric() or not val2.is_numeric():
             return False
         if val2.is_zero:
             return True
         res = apply_N(Expression(SymbolLog, abs(val2 / val1)), evaluation)
-        if not res.is_numeric():
-            return False
-        return res.to_python() < 0
+        return res.to_python() < 0 if res.is_numeric() else False
 
     def new_seed():
         """
@@ -337,7 +316,7 @@ def find_root_newton(f, x0, x, opts, evaluation) -> (Number, bool):
         # If not, tries to restart in a another point closer to x0 than x1.
         if decreasing(new_currval, currval):
             x0, currval = new_seed()
-            count = count + 1
+            count += 1
             continue
         else:
             currval = new_currval
@@ -439,9 +418,9 @@ def get_accuracy_prec_and_maxit(opts: dict, evaluation: "Evaluation") -> tuple:
             value = None
         return value
 
-    acc_goal = opts.get("System`AccuracyGoal", None)
+    acc_goal = opts.get("System`AccuracyGoal")
     acc_goal = to_real_or_none(acc_goal)
-    prec_goal = opts.get("System`PrecisionGoal", None)
+    prec_goal = opts.get("System`PrecisionGoal")
     prec_goal = to_real_or_none(prec_goal)
     max_it = opts.get("System`MaxIteration")
     max_it = to_integer_or_none(max_it)

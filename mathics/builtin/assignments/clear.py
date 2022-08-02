@@ -91,12 +91,14 @@ class Clear(Builtin):
 
     def apply(self, symbols, evaluation):
         "%(name)s[symbols___]"
-        if isinstance(symbols, Symbol):
+        if (
+            isinstance(symbols, Symbol)
+            or not isinstance(symbols, Expression)
+            and isinstance(symbols, String)
+        ):
             symbols = [symbols]
         elif isinstance(symbols, Expression):
             symbols = symbols.get_elements()
-        elif isinstance(symbols, String):
-            symbols = [symbols]
         else:
             symbols = symbols.get_sequence()
 
@@ -257,20 +259,18 @@ class Unset(PostfixOperator):
             if not symbol:
                 evaluation.message(expr.get_head_name(), "fnsym", expr)
                 return SymbolFailed
-            if head is Symbol("System`Options"):
-                empty = {}
-            else:
-                empty = []
+            empty = {} if head is Symbol("System`Options") else []
             evaluation.definitions.set_values(symbol, expr.get_head_name(), empty)
             return Symbol("Null")
         name = expr.get_lookup_name()
         if not name:
             evaluation.message("Unset", "usraw", expr)
             return SymbolFailed
-        if not evaluation.definitions.unset(name, expr):
-            if not isinstance(expr, Atom):
-                evaluation.message("Unset", "norep", expr, Symbol(name))
-                return SymbolFailed
+        if not evaluation.definitions.unset(name, expr) and not isinstance(
+            expr, Atom
+        ):
+            evaluation.message("Unset", "norep", expr, Symbol(name))
+            return SymbolFailed
         return Symbol("Null")
 
 

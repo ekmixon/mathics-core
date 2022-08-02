@@ -123,7 +123,7 @@ class Minimize(Builtin):
                 if val.is_real:
                     if val < 0:
                         negatives_eigenvalues += 1
-                    elif val >= 0:
+                    else:
                         positives_eigenvalues += 1
 
             if positives_eigenvalues + negatives_eigenvalues != len(eigenvals):
@@ -167,7 +167,7 @@ class Minimize(Builtin):
                 return
 
         vars_sympy = [var.to_sympy() for var in vars]
-        constraints = [function for function in f.leaves]
+        constraints = list(f.leaves)
         objective_function = constraints[0].to_sympy()
 
         constraints = constraints[1:]
@@ -185,21 +185,21 @@ class Minimize(Builtin):
             left = left.to_sympy()
             right = right.to_sympy()
 
-            if head_name == "System`LessEqual" or head_name == "System`Less":
+            if head_name in ["System`LessEqual", "System`Less"]:
                 eq = left - right
                 eq = sympy.together(eq)
                 eq = sympy.cancel(eq)
 
                 g_functions.append(eq)
-                g_variables.append(sympy.Symbol("kkt_g" + str(len(g_variables))))
+                g_variables.append(sympy.Symbol(f"kkt_g{len(g_variables)}"))
 
-            elif head_name == "System`GreaterEqual" or head_name == "System`Greater":
+            elif head_name in ["System`GreaterEqual", "System`Greater"]:
                 eq = -1 * (left - right)
                 eq = sympy.together(eq)
                 eq = sympy.cancel(eq)
 
                 g_functions.append(eq)
-                g_variables.append(sympy.Symbol("kkt_g" + str(len(g_variables))))
+                g_variables.append(sympy.Symbol(f"kkt_g{len(g_variables)}"))
 
             elif head_name == "System`Equal":
                 eq = left - right
@@ -207,7 +207,7 @@ class Minimize(Builtin):
                 eq = sympy.cancel(eq)
 
                 h_functions.append(eq)
-                h_variables.append(sympy.Symbol("kkt_h" + str(len(h_variables))))
+                h_variables.append(sympy.Symbol(f"kkt_h{len(h_variables)}"))
 
         equations = []
 
@@ -294,7 +294,7 @@ class Minimize(Builtin):
             [[sympy.diff(deriv, x) for x in all_variables] for deriv in equations]
         )
 
-        for i in range(0, len(all_variables) - len(vars_sympy)):
+        for i in range(len(all_variables) - len(vars_sympy)):
             hessian.col_del(len(all_variables) - i - 1)
             hessian.row_del(len(all_variables) - i - 1)
 
@@ -385,7 +385,7 @@ class Maximize(Builtin):
     def apply_constraints(self, f, vars, evaluation):
         "Maximize[f_List, vars_]"
 
-        constraints = [function for function in f.leaves]
+        constraints = list(f.leaves)
         constraints[0] = from_sympy(constraints[0].to_sympy() * -1)
 
         dual_solutions = (

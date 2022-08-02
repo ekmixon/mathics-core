@@ -158,10 +158,7 @@ class SetDelayed(Set):
     def apply(self, lhs, rhs, evaluation):
         "lhs_ := rhs_"
 
-        if self.assign(lhs, rhs, evaluation):
-            return Symbol("Null")
-        else:
-            return SymbolFailed
+        return Symbol("Null") if self.assign(lhs, rhs, evaluation) else SymbolFailed
 
 
 class TagSet(Builtin, _SetOperator):

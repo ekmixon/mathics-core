@@ -87,10 +87,14 @@ def _damerau_levenshtein(s1, s2, sameQ: Callable[..., bool]):
         # given c1 = s1[i], d_prev_prev = D(i - 2), d_prev = D(i - 1),
         # prev_c1 = s1[[i - 1]], c1 = s1[[i]], compute D(i, ...)
         for j, d_curr_j in enumerate(_levenshtein_di(c1, s2, i, d_prev, sameQ, cost)):
-            if i > 1 and j > 1:
-                if sameQ(c1, s2[j - 2]) and sameQ(prev_c1, s2[j - 1]):  # transposition?
-                    # i.e. if s1[[i]] = s2[[j-1]] and s1[[i-1]] = s2[[j]]
-                    d_curr_j = min(d_curr_j, d_prev_prev[j - 2] + cost)
+            if (
+                i > 1
+                and j > 1
+                and sameQ(c1, s2[j - 2])
+                and sameQ(prev_c1, s2[j - 1])
+            ):
+                # i.e. if s1[[i]] = s2[[j-1]] and s1[[i-1]] = s2[[j]]
+                d_curr_j = min(d_curr_j, d_prev_prev[j - 2] + cost)
             yield d_curr_j
 
     d_prev_prev = None
@@ -110,10 +114,7 @@ def _levenshtein_like_or_border_cases(s1, s2, sameQ: Callable[..., bool], comput
     if len(s1) < len(s2):
         s1, s2 = s2, s1
 
-    if len(s2) == 0:
-        return len(s1)
-
-    return compute(s1, s2, sameQ)
+    return len(s1) if len(s2) == 0 else compute(s1, s2, sameQ)
 
 
 class _StringDistance(Builtin):
@@ -245,11 +246,10 @@ class HammingDistance(Builtin):
 
     @staticmethod
     def _compute(u, v, sameQ, evaluation):
-        if len(u) != len(v):
-            evaluation.message("HammingDistance", "idim", u, v)
-            return None
-        else:
+        if len(u) == len(v):
             return Integer(sum(0 if sameQ(x, y) else 1 for x, y in zip(u, v)))
+        evaluation.message("HammingDistance", "idim", u, v)
+        return None
 
     def apply_list(self, u, v, evaluation):
         "HammingDistance[u_List, v_List]"

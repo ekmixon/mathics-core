@@ -132,7 +132,7 @@ def timeit(func, repeats=None):
     times = []
     if repeats is not None:
         # Fixed number of repeats
-        for i in range(repeats):
+        for _ in range(repeats):
             times.append(time.process_time())
             func()
     else:
@@ -141,10 +141,11 @@ def timeit(func, repeats=None):
         for i in range(repeats):
             times.append(time.process_time())
             func()
-            if (i + 1) in (5, 10, 100, 1000, 5000):
-                if times[-1] > times[0] + 1:
-                    repeats = i + 1
-                    break
+            if (i + 1) in (5, 10, 100, 1000, 5000) and times[-1] > times[
+                0
+            ] + 1:
+                repeats = i + 1
+                break
 
     times.append(time.process_time())
 
@@ -162,9 +163,7 @@ def timeit(func, repeats=None):
 
 
 def truncate_line(string):
-    if len(string) > 70:
-        return string[:70] + "..."
-    return string
+    return f"{string[:70]}..." if len(string) > 70 else string
 
 
 def benchmark_parse(expression_string):
@@ -233,8 +232,12 @@ def main():
     )
 
     parser.add_argument(
-        "--version", "-v", action="version", version="%(prog)s " + mathics.__version__
+        "--version",
+        "-v",
+        action="version",
+        version=f"%(prog)s {mathics.__version__}",
     )
+
 
     parser.add_argument(
         "--section", "-s", dest="section", metavar="SECTION", help="only test SECTION"

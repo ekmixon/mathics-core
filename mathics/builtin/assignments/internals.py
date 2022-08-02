@@ -23,7 +23,7 @@ from functools import reduce
 
 class AssignmentException(Exception):
     def __init__(self, lhs, rhs) -> None:
-        super().__init__(" %s cannot be assigned to %s" % (rhs, lhs))
+        super().__init__(f" {rhs} cannot be assigned to {lhs}")
         self.lhs = lhs
         self.rhs = rhs
 
@@ -59,14 +59,10 @@ def build_rulopc(optval):
 
 
 def get_symbol_list(list, error_callback):
-    if list.has_form("List", None):
-        list = list.leaves
-    else:
-        list = [list]
+    list = list.leaves if list.has_form("List", None) else [list]
     values = []
     for item in list:
-        name = item.get_name()
-        if name:
+        if name := item.get_name():
             values.append(name)
         else:
             error_callback(item)
@@ -112,13 +108,10 @@ def repl_pattern_by_symbol(expr):
     new_elements = []
     for element in elements:
         element = repl_pattern_by_symbol(element)
-        if not (element is element):
+        if element is not element:
             changed = True
         new_elements.append(element)
-    if changed:
-        return Expression(headname, *new_elements)
-    else:
-        return expr
+    return Expression(headname, *new_elements) if changed else expr
 
 
 # Here are the functions related to assign_elementary
@@ -187,7 +180,7 @@ def unroll_conditions(lhs):
         if isinstance(lhs, Atom):
             break
         name, lhs_elements = lhs.get_head_name(), lhs._elements
-    if len(condition) == 0:
+    if not condition:
         return lhs, None
     if len(condition) > 1:
         condition = Expression("System`And", *condition)
@@ -224,8 +217,8 @@ def process_assign_recursion_limit(lhs, rhs, evaluation):
 def process_assign_iteration_limit(lhs, rhs, evaluation):
     rhs_int_value = rhs.get_int_value()
     if (
-        not rhs_int_value or rhs_int_value < 20
-    ) and not rhs.get_name() == "System`Infinity":
+        (not rhs_int_value or rhs_int_value < 20)
+    ) and rhs.get_name() != "System`Infinity":
         evaluation.message("$IterationLimit", "limset", rhs)
         raise AssignmentException(lhs, None)
     return False
@@ -384,11 +377,10 @@ def process_assign_numericq(self, lhs, rhs, evaluation, tags, upset):
         name = target.get_name()
         definition = evaluation.definitions.get_definition(name)
         definition.is_numeric = rhs is SymbolTrue
-        return True
     else:
         evaluation.message("NumericQ", "set", lhs, rhs)
-        # raise AssignmentException(lhs, rhs)
-        return True
+
+    return True
 
 
 def process_assign_n(self, lhs, rhs, evaluation, tags, upset):
@@ -402,10 +394,7 @@ def process_assign_n(self, lhs, rhs, evaluation, tags, upset):
     if len(lhs.leaves) not in (1, 2):
         evaluation.message_args("N", len(lhs.leaves), 1, 2)
         raise AssignmentException(lhs, None)
-    if len(lhs.leaves) == 1:
-        nprec = SymbolMachinePrecision
-    else:
-        nprec = lhs.leaves[1]
+    nprec = SymbolMachinePrecision if len(lhs.leaves) == 1 else lhs.leaves[1]
     focus = lhs.leaves[0]
     lhs = Expression(SymbolN, focus, nprec)
     tags = process_tags_and_upset_dont_allow_custom(
@@ -650,13 +639,17 @@ def process_tags_and_upset_allow_custom(tags, upset, self, lhs, evaluation):
                 "System`Pattern",
             ):
                 element = element.leaves[1]
-            if not isinstance(element, Symbol) and element.get_head_name() in (
-                "System`Blank",
-                "System`BlankSequence",
-                "System`BlankNullSequence",
+            if (
+                not isinstance(element, Symbol)
+                and element.get_head_name()
+                in (
+                    "System`Blank",
+                    "System`BlankSequence",
+                    "System`BlankNullSequence",
+                )
+                and len(element.leaves) == 1
             ):
-                if len(element.leaves) == 1:
-                    element = element.leaves[0]
+                element = element.leaves[0]
 
             allowed_names.append(element.get_lookup_name())
         for name in tags:
@@ -689,16 +682,10 @@ class _SetOperator(object):
     }
 
     def assign_elementary(self, lhs, rhs, evaluation, tags=None, upset=False):
-        if isinstance(lhs, Symbol):
-            name = lhs.name
-        else:
-            name = lhs.get_head_name()
+        name = lhs.name if isinstance(lhs, Symbol) else lhs.get_head_name()
         lhs._format_cache = None
         try:
-            # Deal with direct assignation to properties of
-            # the definition object
-            func = self.special_cases.get(name, None)
-            if func:
+            if func := self.special_cases.get(name, None):
                 return func(self, lhs, rhs, evaluation, tags, upset)
 
             return assign_store_rules_by_tag(self, lhs, rhs, evaluation, tags, upset)
@@ -709,7 +696,7 @@ class _SetOperator(object):
         lhs._format_cache = None
         defs = evaluation.definitions
         if lhs.get_head_name() == "System`List":
-            if not (rhs.get_head_name() == "System`List") or len(lhs.leaves) != len(
+            if rhs.get_head_name() != "System`List" or len(lhs.leaves) != len(
                 rhs.leaves
             ):  # nopep8
 

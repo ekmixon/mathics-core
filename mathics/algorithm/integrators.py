@@ -24,8 +24,7 @@ def decompose_domain(interval, evaluation):
     if interval.has_form("System`Sequence", 1, None):
         intervals = []
         for leaf in interval.leaves:
-            inner_interval = decompose_domain(leaf, evaluation)
-            if inner_interval:
+            if inner_interval := decompose_domain(leaf, evaluation):
                 intervals.append(inner_interval)
             else:
                 evaluation.message("ilim", leaf)
@@ -33,17 +32,17 @@ def decompose_domain(interval, evaluation):
         return intervals
 
     if interval.has_form("System`List", 3, None):
-        intervals = []
         intvar = interval.leaves[0]
         if not isinstance(intvar, Symbol):
             evaluation.message("ilim", interval)
             return None
-        boundaries = [a for a in interval.leaves[1:]]
-        if any([b.get_head_name() == "System`Complex" for b in boundaries]):
+        boundaries = list(interval.leaves[1:])
+        if any(b.get_head_name() == "System`Complex" for b in boundaries):
             intvar = Expression("List", intvar, Expression("Blank", Symbol("Complex")))
-        for i in range(len(boundaries) - 1):
-            intervals.append((boundaries[i], boundaries[i + 1]))
-        if len(intervals) > 0:
+        if intervals := [
+            (boundaries[i], boundaries[i + 1])
+            for i in range(len(boundaries) - 1)
+        ]:
             return (intvar, intervals)
 
     evaluation.message("ilim", interval)
@@ -182,9 +181,7 @@ def apply_D_to_Integral(func, domain, var, evaluation, options, head):
         domain = domain._elements[-1]
 
     terms = []
-    # Evaluates the derivative regarding the integrand:
-    integrand = Expression(SymbolD, func, var).evaluate(evaluation)
-    if integrand:
+    if integrand := Expression(SymbolD, func, var).evaluate(evaluation):
         term = Expression(head, integrand, domain, *options)
         terms = [term]
 
@@ -198,8 +195,7 @@ def apply_D_to_Integral(func, domain, var, evaluation, options, head):
     for limit in limits:
         for k, lim in enumerate(limit):
             jac = Expression(SymbolD, lim, var)
-            ev_jac = jac.evaluate(evaluation)
-            if ev_jac:
+            if ev_jac := jac.evaluate(evaluation):
                 jac = ev_jac
             if isinstance(jac, Number) and jac.is_zero:
                 continue
@@ -208,18 +204,15 @@ def apply_D_to_Integral(func, domain, var, evaluation, options, head):
                 f = Expression(SymbolTimes, f, jac)
             else:
                 f = Expression(SymbolTimes, Integer(-1), f, jac)
-            eval_f = f.evaluate(evaluation)
-            if eval_f:
+            if eval_f := f.evaluate(evaluation):
                 f = eval_f
             if isinstance(f, Number) and f.is_zero:
                 continue
             terms.append(f)
 
-    if len(terms) == 0:
+    if not terms:
         return Integer0
-    if len(terms) == 1:
-        return terms[0]
-    return Expression(SymbolPlus, *terms)
+    return terms[0] if len(terms) == 1 else Expression(SymbolPlus, *terms)
 
 
 integrator_methods = {

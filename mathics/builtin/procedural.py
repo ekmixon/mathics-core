@@ -436,11 +436,7 @@ class FixedPoint(Builtin):
 
         if count is None:
             count = self.get_option(options, "MaxIterations", evaluation)
-            if count.is_numeric(evaluation):
-                count = count.get_int_value()
-            else:
-                count = None
-
+            count = count.get_int_value() if count.is_numeric(evaluation) else None
         result = expr
         index = 0
         sametest = self.get_option(options, "SameTest", evaluation)
@@ -455,10 +451,9 @@ class FixedPoint(Builtin):
                 same = same.is_true()
                 if same:
                     break
-            else:
-                if new_result == result:
-                    result = new_result
-                    break
+            elif new_result == result:
+                result = new_result
+                break
             result = new_result
             index += 1
 
@@ -573,7 +568,7 @@ class Nest(Builtin):
         if n is None or n < 0:
             return
         result = expr
-        for k in range(n):
+        for _ in range(n):
             result = Expression(f, result).evaluate(evaluation)
         return result
 
@@ -610,7 +605,7 @@ class NestList(Builtin):
         interm = expr
         result = [interm]
 
-        for k in range(n):
+        for _ in range(n):
             interm = Expression(f, interm).evaluate(evaluation)
             result.append(interm)
 
@@ -646,10 +641,7 @@ class NestWhile(Builtin):
 
         results = [expr]
         while True:
-            if m.get_name() == "All":
-                test_elements = results
-            else:
-                test_elements = results[-m.value :]
+            test_elements = results if m.get_name() == "All" else results[-m.value :]
             test_expr = Expression(test, *test_elements)
             test_result = test_expr.evaluate(evaluation)
             if test_result.is_true():
@@ -810,9 +802,7 @@ class Which(Builtin):
             if test_result.is_true():
                 return item.evaluate(evaluation)
             elif test_result != SymbolFalse:
-                if len(items) == nr_items:
-                    return None
-                return Expression("Which", *items)
+                return None if len(items) == nr_items else Expression("Which", *items)
             items = items[2:]
         return Symbol("Null")
 

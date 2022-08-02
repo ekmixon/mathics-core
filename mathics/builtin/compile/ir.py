@@ -146,16 +146,11 @@ class IRGenerator(object):
         # if the return type isn't correct then try again
         if self._known_ret_type is None:
             # determine the type returned
-            if ir_code.type == void_type:
-                if self._returned_type is not None:
-                    # we returned something so use that type
-                    self._known_ret_type = self._returned_type
-                    # force generation again in case multiple returns of different types
-                    return self.generate_ir()
-                else:
-                    # actually returned void e.g. Print[]
-                    pass
-
+            if ir_code.type == void_type and self._returned_type is not None:
+                # we returned something so use that type
+                self._known_ret_type = self._returned_type
+                # force generation again in case multiple returns of different types
+                return self.generate_ir()
             if ir_code.type != ret_type:
                 # guessed incorrectly - try again
                 self._known_ret_type = ir_code.type
@@ -173,7 +168,7 @@ class IRGenerator(object):
         """
         # see https://github.com/numba/llvmlite/pull/205 for an explanation of declare_intrinsic
         mod = self.builder.module
-        fullname = name + "." + ret_type.intrinsic_name
+        fullname = f"{name}.{ret_type.intrinsic_name}"
         fnty = ir.FunctionType(ret_type, [arg.type for arg in args])
         intr = mod.declare_intrinsic(fullname, fnty=fnty)
         return self.builder.call(intr, args)
@@ -208,9 +203,7 @@ class IRGenerator(object):
 
         f = self.builder.inttoptr(int_type(c_func_addr), cb_func_ptr_type, name="f")
         call = self.builder.call(f, args)
-        if call.type == void_type:
-            return self.builder.ret_void()
-        return call
+        return self.builder.ret_void() if call.type == void_type else call
 
     def _gen_ir(self, expr):
         """
@@ -232,7 +225,7 @@ class IRGenerator(object):
         head_name = expr.get_head_name()
         if head_name.startswith("System`"):
             head_name = head_name[7:]
-            method = getattr(self, "_gen_" + head_name, None)
+            method = getattr(self, f"_gen_{head_name}", None)
         else:
             method = None
 
@@ -282,9 +275,9 @@ class IRGenerator(object):
             builder.position_at_end(else_block)
             else_result = self.int_to_real(else_result)
             ret_type = real_type
-        elif then_result.type == void_type and else_result.type != void_type:
+        elif then_result.type == void_type:
             ret_type = else_result.type
-        elif then_result.type != void_type and else_result.type == void_type:
+        elif else_result.type == void_type:
             ret_type = then_result.type
         else:
             raise CompileError()
@@ -324,10 +317,9 @@ class IRGenerator(object):
             self._returned_type = arg.type
         else:
             raise CompileError(
-                "Conflicting return types {} and {}.".format(
-                    self._returned_type, arg.type
-                )
+                f"Conflicting return types {self._returned_type} and {arg.type}."
             )
+
         return self.builder.ret(arg)
 
     @int_real_args(1)

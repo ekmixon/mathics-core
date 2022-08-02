@@ -83,11 +83,7 @@ class Function(PostfixOperator):
     def apply_named(self, vars, body, args, evaluation):
         "Function[vars_, body_][args___]"
 
-        if vars.has_form("List", None):
-            vars = vars.leaves
-        else:
-            vars = [vars]
-
+        vars = vars.leaves if vars.has_form("List", None) else [vars]
         # print([v.get_head_name()=="System`Pattern" or isinstance(v, Symbol) for v in vars])
         args = args.get_sequence()
         if len(vars) > len(args):
@@ -109,11 +105,7 @@ class Function(PostfixOperator):
     # Not sure if DRY is possible here...
     def apply_named_attr(self, vars, body, attr, args, evaluation):
         "Function[vars_, body_, attr_][args___]"
-        if vars.has_form("List", None):
-            vars = vars.leaves
-        else:
-            vars = [vars]
-
+        vars = vars.leaves if vars.has_form("List", None) else [vars]
         args = args.get_sequence()
         if len(vars) > len(args):
             evaluation.message("Function", "fpct")

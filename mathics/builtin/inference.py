@@ -115,10 +115,9 @@ def remove_nots_when_unnecesary(pred, evaluation):
 
 def get_assumptions_list(evaluation):
     assumptions = None
-    assumptions_def = evaluation.definitions.get_definition(
+    if assumptions_def := evaluation.definitions.get_definition(
         "System`$Assumptions", only_if_exists=True
-    )
-    if assumptions_def:
+    ):
         assumptions = assumptions_def.ownvalues
         if len(assumptions) > 0:
             assumptions = assumptions[0].replace
@@ -138,8 +137,8 @@ def remove_duplicated_assumptions(assumptions_list, evaluation):
         return assumptions_list
     assumptions_list = sorted(assumptions_list)
     unique_assumptions = [assumptions_list[0]]
-    for i, assumption in enumerate(assumptions_list):
-        if not (assumption == unique_assumptions[-1]):
+    for assumption in assumptions_list:
+        if assumption != unique_assumptions[-1]:
             unique_assumptions.append(assumption)
     return unique_assumptions
 
@@ -164,15 +163,17 @@ def logical_expand_assumptions(assumptions_list, evaluation):
             continue
         if assumption.has_form("And", None):
             changed = True
-            for leaf in assumption.leaves:
-                new_assumptions_list.append(leaf)
+            new_assumptions_list.extend(iter(assumption.leaves))
             continue
         if assumption.has_form("Not", 1):
             sentence = assumption._elements[0]
             if sentence.has_form("Or", None):
                 changed = True
-                for element in sentence._elements:
-                    new_assumptions_list.append(Expression("Not", element))
+                new_assumptions_list.extend(
+                    Expression("Not", element)
+                    for element in sentence._elements
+                )
+
                 continue
             if sentence.has_form("And", None):
                 elements = (
@@ -182,12 +183,19 @@ def logical_expand_assumptions(assumptions_list, evaluation):
                 continue
             if sentence.has_form("Implies", 2):
                 changed = True
-                new_assumptions_list.append(sentence._elements[0])
-                new_assumptions_list.append(Expression("Not", sentence._elements[1]))
+                new_assumptions_list.extend(
+                    (
+                        sentence._elements[0],
+                        Expression("Not", sentence._elements[1]),
+                    )
+                )
+
         if assumption.has_form("Nor", None):
             changed = True
-            for leaf in assumption.leaves:
-                new_assumptions_list.append(Expression("Not", leaf))
+            new_assumptions_list.extend(
+                Expression("Not", leaf) for leaf in assumption.leaves
+            )
+
             continue
         else:
             new_assumptions_list.append(assumption)
@@ -236,8 +244,13 @@ def algebraic_expand_assumptions(assumptions_list, evaluation):
             changed = True
             for i in range(len(leaves)):
                 for j in range(i):
-                    new_assumptions_list.append(Expression(head, leaves[i], leaves[j]))
-                    new_assumptions_list.append(Expression(head, leaves[j], leaves[i]))
+                    new_assumptions_list.extend(
+                        (
+                            Expression(head, leaves[i], leaves[j]),
+                            Expression(head, leaves[j], leaves[i]),
+                        )
+                    )
+
         elif assumption.has_form(
             ("Less", "Greater", "LessEqual", "GreaterEqual"), (3, None)
         ):
@@ -245,8 +258,10 @@ def algebraic_expand_assumptions(assumptions_list, evaluation):
             head = assumption.get_head()
             changed = True
             for i in range(len(leaves)):
-                for j in range(i):
-                    new_assumptions_list.append(Expression(head, leaves[i], leaves[j]))
+                new_assumptions_list.extend(
+                    Expression(head, leaves[i], leaves[j]) for j in range(i)
+                )
+
         else:
             new_assumptions_list.append(assumption)
 
@@ -295,11 +310,7 @@ def get_assumption_rules_dispatch(evaluation):
             value = not value
             pat = pat._elements[0]
 
-        if value:
-            symbol_value = SymbolTrue
-        else:
-            symbol_value = SymbolFalse
-
+        symbol_value = SymbolTrue if value else SymbolFalse
         if pat.has_form("Equal", 2):
             if value:
                 lhs, rhs = pat._elements
@@ -317,35 +328,43 @@ def get_assumption_rules_dispatch(evaluation):
             assumption_rules.append(Rule(symm_pat, symbol_value))
         elif pat.has_form("Less", 2):
             if value:
-                assumption_rules.append(Rule(pat, SymbolTrue))
-                assumption_rules.append(
-                    Rule(
-                        Expression(pat._head, pat._elements[1], pat._elements[0]),
-                        SymbolFalse,
+                assumption_rules.extend(
+                    (
+                        Rule(pat, SymbolTrue),
+                        Rule(
+                            Expression(
+                                pat._head, pat._elements[1], pat._elements[0]
+                            ),
+                            SymbolFalse,
+                        ),
                     )
                 )
+
                 for head in ("Equal", "Equivalent"):
-                    assumption_rules.append(
-                        Rule(
-                            Expression(head, pat._elements[0], pat._elements[1]),
-                            SymbolFalse,
+                    assumption_rules.extend(
+                        (
+                            Rule(
+                                Expression(
+                                    head, pat._elements[0], pat._elements[1]
+                                ),
+                                SymbolFalse,
+                            ),
+                            Rule(
+                                Expression(
+                                    head, pat._elements[1], pat._elements[0]
+                                ),
+                                SymbolFalse,
+                            ),
                         )
                     )
-                    assumption_rules.append(
-                        Rule(
-                            Expression(head, pat._elements[1], pat._elements[0]),
-                            SymbolFalse,
-                        )
-                    )
+
             else:
                 assumption_rules.append(Rule(pat, SymbolFalse))
         else:
             assumption_rules.append(Rule(pat, symbol_value))
     # TODO: expand the pred and assumptions into an standard,
     # atomized form, and then apply the rules...
-    if len(assumption_rules) == 0:
-        return None
-    return assumption_rules
+    return assumption_rules or None
 
 
 def evaluate_predicate(pred, evaluation):
@@ -373,12 +392,11 @@ def evaluate_predicate(pred, evaluation):
     if assumption_rules is None:
         return remove_nots_when_unnecesary(pred, evaluation).evaluate(evaluation)
 
-    if assumption_rules is not None:
-        debug_logical_expr(" Now, using the assumptions over ", pred, evaluation)
-        changed = True
-        while changed:
-            pred, changed = pred.apply_rules(assumption_rules, evaluation)
-            debug_logical_expr(" -> ", pred, evaluation)
+    debug_logical_expr(" Now, using the assumptions over ", pred, evaluation)
+    changed = True
+    while changed:
+        pred, changed = pred.apply_rules(assumption_rules, evaluation)
+        debug_logical_expr(" -> ", pred, evaluation)
 
     pred = remove_nots_when_unnecesary(pred, evaluation).evaluate(evaluation)
     return pred

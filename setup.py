@@ -103,12 +103,12 @@ else:
         }
         EXTENSIONS = [
             Extension(
-                "mathics.%s.%s" % (parent, module),
-                ["mathics/%s/%s.py" % (parent, module)],
+                f"mathics.{parent}.{module}", [f"mathics/{parent}/{module}.py"]
             )
             for parent, modules in EXTENSIONS_DICT.items()
             for module in modules
         ]
+
         # EXTENSIONS_SUBDIR_DICT = {
         #     "builtin": [("numbers", "arithmetic"), ("numbers", "numeric"), ("drawing", "graphics")],
         # }

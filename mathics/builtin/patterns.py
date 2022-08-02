@@ -129,19 +129,12 @@ def create_rules(rules_expr, expr, name, evaluation, extra_args=[]):
         rules = rules_expr.leaves
     else:
         rules = [rules_expr]
-    any_lists = False
-    for item in rules:
-        if item.get_head() in (SymbolList, SymbolDispatch):
-            any_lists = True
-            break
+    any_lists = any(
+        item.get_head() in (SymbolList, SymbolDispatch) for item in rules
+    )
 
     if any_lists:
-        all_lists = True
-        for item in rules:
-            if not item.get_head() is SymbolList:
-                all_lists = False
-                break
-
+        all_lists = all(item.get_head() is SymbolList for item in rules)
         if all_lists:
             return (
                 Expression(
@@ -150,9 +143,8 @@ def create_rules(rules_expr, expr, name, evaluation, extra_args=[]):
                 ),
                 True,
             )
-        else:
-            evaluation.message(name, "rmix", rules_expr)
-            return None, True
+        evaluation.message(name, "rmix", rules_expr)
+        return None, True
     else:
         result = []
         for rule in rules:
@@ -381,11 +373,7 @@ class ReplaceRepeated(BinaryOperator):
             return rules
 
         maxit = self.get_option(options, "MaxIterations", evaluation)
-        if maxit.is_numeric(evaluation):
-            maxit = maxit.get_int_value()
-        else:
-            maxit = -1
-
+        maxit = maxit.get_int_value() if maxit.is_numeric(evaluation) else -1
         while True:
             evaluation.check_stopped()
             if maxit == 0:
@@ -519,8 +507,7 @@ class PatternTest(BinaryOperator, PatternObject):
         self.test = expr.leaves[1]
         testname = self.test.get_name()
         self.test_name = testname
-        match_function = match_functions.get(testname, None)
-        if match_function:
+        if match_function := match_functions.get(testname, None):
             self.match = match_function
 
     def match_atom(self, yield_func, expression, vars, evaluation, **kwargs):
@@ -787,10 +774,7 @@ class _StopGeneratorMatchQ(StopGenerator):
 
 class Matcher(object):
     def __init__(self, form):
-        if isinstance(form, Pattern):
-            self.form = form
-        else:
-            self.form = Pattern.create(form)
+        self.form = form if isinstance(form, Pattern) else Pattern.create(form)
 
     def match(self, expr, evaluation):
         def yield_func(vars, rest):
@@ -831,9 +815,7 @@ class MatchQ(Builtin):
         "MatchQ[expr_, form_]"
 
         try:
-            if match(expr, form, evaluation):
-                return SymbolTrue
-            return SymbolFalse
+            return SymbolTrue if match(expr, form, evaluation) else SymbolFalse
         except PatternError as e:
             evaluation.message(e.name, e.tag, *(e.args))
             return SymbolFalse
@@ -979,7 +961,7 @@ class Pattern_(PatternObject):
         self.pattern = Pattern.create(expr.leaves[1])
 
     def __repr__(self):
-        return "<Pattern: %s>" % repr(self.pattern)
+        return f"<Pattern: {repr(self.pattern)}>"
 
     def get_match_count(self, vars={}):
         return self.pattern.get_match_count(vars)
@@ -998,9 +980,8 @@ class Pattern_(PatternObject):
                 )
             else:
                 self.pattern.match(yield_func, expression, new_vars, evaluation)
-        else:
-            if existing.sameQ(expression):
-                yield_func(vars, None)
+        elif existing.sameQ(expression):
+            yield_func(vars, None)
 
     def get_match_candidates(self, leaves, expression, attributes, evaluation, vars={}):
         existing = vars.get(self.varname, None)
@@ -1008,13 +989,12 @@ class Pattern_(PatternObject):
             return self.pattern.get_match_candidates(
                 leaves, expression, attributes, evaluation, vars
             )
-        else:
-            # Treat existing variable as verbatim
-            verbatim_expr = Expression("Verbatim", existing)
-            verbatim = Verbatim(verbatim_expr)
-            return verbatim.get_match_candidates(
-                leaves, expression, attributes, evaluation, vars
-            )
+        # Treat existing variable as verbatim
+        verbatim_expr = Expression("Verbatim", existing)
+        verbatim = Verbatim(verbatim_expr)
+        return verbatim.get_match_candidates(
+            leaves, expression, attributes, evaluation, vars
+        )
 
 
 class Optional(BinaryOperator, PatternObject):
@@ -1081,10 +1061,7 @@ class Optional(BinaryOperator, PatternObject):
     def init(self, expr):
         super(Optional, self).init(expr)
         self.pattern = Pattern.create(expr.leaves[0])
-        if len(expr.leaves) == 2:
-            self.default = expr.leaves[1]
-        else:
-            self.default = None
+        self.default = expr.leaves[1] if len(expr.leaves) == 2 else None
 
     def match(
         self,
@@ -1149,13 +1126,7 @@ class _Blank(PatternObject):
 
     def init(self, expr):
         super(_Blank, self).init(expr)
-        if expr.leaves:
-            self.head = expr.leaves[0]
-        else:
-            # FIXME: elswhere, some code wants to
-            # get the attributes of head.
-            # So is this really the best thing to do here?
-            self.head = None
+        self.head = expr.leaves[0] if expr.leaves else None
 
 
 class Blank(_Blank):
@@ -1196,10 +1167,10 @@ class Blank(_Blank):
 
     def match(self, yield_func, expression, vars, evaluation, **kwargs):
         if not expression.has_form("Sequence", 0):
-            if self.head is not None:
-                if expression.get_head().sameQ(self.head):
-                    yield_func(vars, None)
-            else:
+            if self.head is None:
+                yield_func(vars, None)
+
+            elif expression.get_head().sameQ(self.head):
                 yield_func(vars, None)
 
 
@@ -1252,11 +1223,7 @@ class BlankSequence(_Blank):
         if not leaves:
             return
         if self.head:
-            ok = True
-            for leaf in leaves:
-                if leaf.get_head() != self.head:
-                    ok = False
-                    break
+            ok = all(leaf.get_head() == self.head for leaf in leaves)
             if ok:
                 yield_func(vars, None)
         else:
@@ -1304,11 +1271,7 @@ class BlankNullSequence(_Blank):
     def match(self, yield_func, expression, vars, evaluation, **kwargs):
         leaves = expression.get_sequence()
         if self.head:
-            ok = True
-            for leaf in leaves:
-                if leaf.get_head() != self.head:
-                    ok = False
-                    break
+            ok = all(leaf.get_head() == self.head for leaf in leaves)
             if ok:
                 yield_func(vars, None)
         else:
@@ -1364,9 +1327,11 @@ class Repeated(PostfixOperator, PatternObject):
         self.min = min
         if len(expr.leaves) == 2:
             element_1 = expr.leaves[1]
-            allnumbers = not any(
-                element.get_int_value() is None for element in element_1.get_elements()
+            allnumbers = all(
+                element.get_int_value() is not None
+                for element in element_1.get_elements()
             )
+
             if element_1.has_form("List", 1, 2) and allnumbers:
                 self.max = element_1.leaves[-1].get_int_value()
                 self.min = element_1.leaves[0].get_int_value()
@@ -1571,12 +1536,12 @@ class OptionsPattern(PatternObject):
     def match(self, yield_func, expression, vars, evaluation, **kwargs):
         if self.defaults is None:
             self.defaults = kwargs.get("head")
-            if self.defaults is None:
-                # we end up here with OptionsPattern that do not have any
-                # default options defined, e.g. with this code:
-                # f[x:OptionsPattern[]] := x; f["Test" -> 1]
-                # set self.defaults to an empty List, so we don't crash.
-                self.defaults = Expression(SymbolList)
+        if self.defaults is None:
+            # we end up here with OptionsPattern that do not have any
+            # default options defined, e.g. with this code:
+            # f[x:OptionsPattern[]] := x; f["Test" -> 1]
+            # set self.defaults to an empty List, so we don't crash.
+            self.defaults = Expression(SymbolList)
         values = self.defaults.get_option_values(
             evaluation, allow_symbols=True, stop_on_error=False
         )
@@ -1588,7 +1553,7 @@ class OptionsPattern(PatternObject):
             values.update(option_values)
         new_vars = vars.copy()
         for name, value in values.items():
-            new_vars["_option_" + name] = value
+            new_vars[f"_option_{name}"] = value
         yield_func(new_vars, None)
 
     def get_match_count(self, vars={}):
@@ -1694,11 +1659,7 @@ class DispatchAtom(AtomBuiltin):
         if isinstance(rules, Symbol):
             rules = rules.evaluate(evaluation)
 
-        if rules.has_form("List", None):
-            rules = rules._elements
-        else:
-            rules = [rules]
-
+        rules = rules._elements if rules.has_form("List", None) else [rules]
         all_list = all(rule.has_form("List", None) for rule in rules)
         if all_list:
             leaves = [self.apply_create(rule, evaluation) for rule in rules]

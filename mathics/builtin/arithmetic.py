@@ -187,9 +187,7 @@ class _MPMathMultiFunction(_MPMathFunction):
             name = fallback_name
             if names is not None:
                 name = names[len(leaves)]
-            if name is None:
-                return None
-            return getattr(module, name)
+            return None if name is None else getattr(module, name)
         except KeyError:
             return None
 
@@ -291,16 +289,15 @@ class DirectedInfinity(SympyFunction):
     }
 
     def to_sympy(self, expr, **kwargs):
-        if len(expr._elements) == 1:
-            dir = expr.leaves[0].get_int_value()
-            if dir == 1:
-                return sympy.oo
-            elif dir == -1:
-                return -sympy.oo
-            else:
-                return sympy.Mul((expr._elements[0].to_sympy()), sympy.zoo)
-        else:
+        if len(expr._elements) != 1:
             return sympy.zoo
+        dir = expr.leaves[0].get_int_value()
+        if dir == 1:
+            return sympy.oo
+        elif dir == -1:
+            return -sympy.oo
+        else:
+            return sympy.Mul((expr._elements[0].to_sympy()), sympy.zoo)
 
 
 class Re(SympyFunction):
@@ -549,9 +546,7 @@ class Sign(SympyFunction):
             return Expression("Times", x, Expression("Power", Expression("Abs", x), -1))
 
         sympy_x = x.to_sympy()
-        if sympy_x is None:
-            return None
-        return super().apply(x, evaluation)
+        return None if sympy_x is None else super().apply(x, evaluation)
 
     def apply_error(self, x, seqs, evaluation):
         "Sign[x_, seqs__]"
@@ -800,10 +795,7 @@ class Rational_(Builtin):
     def apply(self, n, m, evaluation):
         "%(name)s[n_Integer, m_Integer]"
 
-        if m.value == 1:
-            return n
-        else:
-            return Rational(n.value, m.value)
+        return n if m.value == 1 else Rational(n.value, m.value)
 
 
 class Complex_(Builtin):
@@ -972,53 +964,47 @@ class Sum(_IterationFunction, SympyFunction):
         """
         Perform summation via sympy.summation
         """
-        if expr.has_form("Sum", 2) and expr.leaves[1].has_form("List", 3):
-            index = expr.leaves[1]
-            arg_kwargs = kwargs.copy()
-            arg_kwargs["convert_all_global_functions"] = True
-            f_sympy = expr.leaves[0].to_sympy(**arg_kwargs)
-            if f_sympy is None:
-                return
+        if not expr.has_form("Sum", 2) or not expr.leaves[1].has_form("List", 3):
+            return
+        index = expr.leaves[1]
+        arg_kwargs = kwargs.copy()
+        arg_kwargs["convert_all_global_functions"] = True
+        f_sympy = expr.leaves[0].to_sympy(**arg_kwargs)
+        if f_sympy is None:
+            return
 
-            evaluation = kwargs.get("evaluation", None)
+        evaluation = kwargs.get("evaluation")
 
-            # Handle summation parameters: variable, min, max
-            var_min_max = index.leaves[:3]
-            bounds = [expr.to_sympy(**kwargs) for expr in var_min_max]
+        # Handle summation parameters: variable, min, max
+        var_min_max = index.leaves[:3]
+        bounds = [expr.to_sympy(**kwargs) for expr in var_min_max]
 
-            if evaluation:
-                # Min and max might be Mathics expressions. If so, evaluate them.
-                for i in (1, 2):
-                    min_max_expr = var_min_max[i]
-                    if not isinstance(expr, Symbol):
-                        min_max_expr_eval = min_max_expr.evaluate(evaluation)
-                        value = min_max_expr_eval.to_sympy(**kwargs)
-                        bounds[i] = value
+        if evaluation:
+            # Min and max might be Mathics expressions. If so, evaluate them.
+            for i in (1, 2):
+                min_max_expr = var_min_max[i]
+                if not isinstance(expr, Symbol):
+                    min_max_expr_eval = min_max_expr.evaluate(evaluation)
+                    value = min_max_expr_eval.to_sympy(**kwargs)
+                    bounds[i] = value
 
             # FIXME: The below tests on SympyExpression, but really the
             # test should be broader.
-            if isinstance(f_sympy, sympy.core.basic.Basic):
-                # sympy.summation() won't be able to handle Mathics functions in
-                # in its first argument, the function paramameter.
-                # For example in Sum[Identity[x], {x, 3}], sympy.summation can't
-                # evaluate Indentity[x].
-                # In general we want to avoid using Sympy if we can.
-                # If we have integer bounds, we'll use Mathics's iterator Sum
-                # (which is Plus)
+        if isinstance(f_sympy, sympy.core.basic.Basic) and all(
+            hasattr(i, "is_integer") and i.is_integer for i in bounds[1:]
+        ):
+            # When we have integer bounds, it is better to not use Sympy but
+            # use Mathics evaluation. We turn:
+            # Sum[f[x], {<limits>}] into
+            #   MathicsSum[Table[f[x], {<limits>}]]
+            # where MathicsSum is self.get_result() our Iteration iterator.
+            values = Expression("Table", *expr.leaves).evaluate(evaluation)
+            ret = self.get_result(values.leaves).evaluate(evaluation)
+            # Make sure to convert the result back to sympy.
+            return ret.to_sympy()
 
-                if all(hasattr(i, "is_integer") and i.is_integer for i in bounds[1:]):
-                    # When we have integer bounds, it is better to not use Sympy but
-                    # use Mathics evaluation. We turn:
-                    # Sum[f[x], {<limits>}] into
-                    #   MathicsSum[Table[f[x], {<limits>}]]
-                    # where MathicsSum is self.get_result() our Iteration iterator.
-                    values = Expression("Table", *expr.leaves).evaluate(evaluation)
-                    ret = self.get_result(values.leaves).evaluate(evaluation)
-                    # Make sure to convert the result back to sympy.
-                    return ret.to_sympy()
-
-            if None not in bounds:
-                return sympy.summation(f_sympy, bounds)
+        if None not in bounds:
+            return sympy.summation(f_sympy, bounds)
 
 
 class Product(_IterationFunction, SympyFunction):
@@ -1146,7 +1132,7 @@ class Piecewise(SympyFunction):
 
     def to_sympy(self, expr, **kwargs):
         leaves = expr.leaves
-        evaluation = kwargs.get("evaluation", None)
+        evaluation = kwargs.get("evaluation")
         if len(leaves) not in (1, 2):
             return
 
@@ -1343,8 +1329,9 @@ class ConditionalExpression(Builtin):
             if not (sympy_cond.is_Relational or sympy_cond.is_Boolean):
                 return
 
-        sympy_cases = (
-            (expr.to_sympy(**kwargs), sympy_cond),
-            (sympy.Symbol(sympy_symbol_prefix + "System`Undefined"), True),
+        sympy_cases = (expr.to_sympy(**kwargs), sympy_cond), (
+            sympy.Symbol(f"{sympy_symbol_prefix}System`Undefined"),
+            True,
         )
+
         return sympy.Piecewise(*sympy_cases)

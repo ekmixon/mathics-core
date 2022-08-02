@@ -98,10 +98,7 @@ class Coords(object):
         if expr is not None:
             if expr.has_form("Offset", 1, 2):
                 self.d = coords(expr.leaves[0])
-                if len(expr.leaves) > 1:
-                    self.p = coords(expr.leaves[1])
-                else:
-                    self.p = None
+                self.p = coords(expr.leaves[1]) if len(expr.leaves) > 1 else None
             else:
                 self.p = coords(expr)
 
@@ -147,7 +144,7 @@ def _data_and_options(leaves, defined_options):
             if name_head == "System`Symbol":
                 py_name = name.get_name()
             elif name_head == "System`String":
-                py_name = "System`" + name.get_string_value()
+                py_name = f"System`{name.get_string_value()}"
             else:  # unsupported name type
                 raise BoxConstructError
             options[py_name] = value
@@ -180,14 +177,11 @@ def _extract_graphics(graphics, format, evaluation):
     ox = -elements.xmin * sx + xmin
     oy = -elements.ymin * sy + ymin
 
-    # generate code for svg or asy.
-
-    if format in ("asy", "svg"):
-        format_fn = lookup_method(elements, format)
-        code = format_fn(elements)
-    else:
+    if format not in ("asy", "svg"):
         raise NotImplementedError
 
+    format_fn = lookup_method(elements, format)
+    code = format_fn(elements)
     return xmin, xmax, ymin, ymax, ox, oy, ex, ey, code
 
 
@@ -656,12 +650,9 @@ def _svg_bezier(*segments):
     k, p = segments[0]
     yield "M%f,%f" % p[0]
 
-    for s in path(k, p[1:]):
-        yield s
-
+    yield from path(k, p[1:])
     for k, p in segments[1:]:
-        for s in path(k, p):
-            yield s
+        yield from path(k, p)
 
 
 class FilledCurve(Builtin):
@@ -812,11 +803,10 @@ class Arrowheads(_GraphicsElement):
         self.spec = item.leaves[0]
 
     def _arrow_size(self, s, extent):
-        if isinstance(s, Symbol):
-            size = self.symbolic_sizes.get(s.get_name(), 0)
-            return self.graphics.translate_absolute((size, 0))[0]
-        else:
+        if not isinstance(s, Symbol):
             return _to_float(s) * extent
+        size = self.symbolic_sizes.get(s.get_name(), 0)
+        return self.graphics.translate_absolute((size, 0))[0]
 
     def heads(self, extent, default_arrow, custom_arrow):
         # see https://reference.wolfram.com/language/ref/Arrowheads.html
@@ -921,8 +911,7 @@ class _Line:
                     else:
                         dl, px, py, dx, dy = seg[i]
 
-            for shape in draw(px, py, dx / dl, dy / dl, t, s):
-                yield shape
+            yield from draw(px, py, dx / dl, dy / dl, t, s)
 
 
 def _bezier_derivative(p):
@@ -969,7 +958,7 @@ class _BezierCurve:
     def make_draw_asy(self, pen):
         def draw(points):
             for path in asy_bezier((self.spline_degree, points)):
-                yield "draw(%s, %s);" % (path, pen)
+                yield f"draw({path}, {pen});"
 
         return draw
 
@@ -980,11 +969,7 @@ class _BezierCurve:
         # FIXME combined curves
 
         cp = list(zip(*points))
-        if len(points) >= 3:
-            dcp = _bezier_derivative(cp)
-        else:
-            dcp = cp
-
+        dcp = _bezier_derivative(cp) if len(points) >= 3 else cp
         for s, t, draw in heads:
             if s == 0.0:  # ignore zero-sized arrows
                 continue
@@ -996,8 +981,7 @@ class _BezierCurve:
             tx /= tl
             ty /= tl
 
-            for shape in draw(px, py, tx, ty, 0.0, s):
-                yield shape
+            yield from draw(px, py, tx, ty, 0.0, s)
 
 
 def total_extent(extents):
@@ -1125,9 +1109,7 @@ class Style(object):
         edge_style, _ = self.get_style(
             _Thickness, default_to_faces=face_element, consider_forms=face_element
         )
-        if edge_style is None:
-            return 0
-        return edge_style.get_thickness()
+        return 0 if edge_style is None else edge_style.get_thickness()
 
 
 def _flatten(elements):
@@ -1135,8 +1117,7 @@ def _flatten(elements):
         if element.get_head() is SymbolList:
             flattened = element.flatten_with_respect_to_head(SymbolList)
             if flattened.get_head() is SymbolList:
-                for x in flattened.elements:
-                    yield x
+                yield from flattened.elements
             else:
                 yield flattened
         else:
@@ -1154,9 +1135,7 @@ class _GraphicsElements(object):
 
         def get_options(name):
             builtin = builtins.get(name)
-            if builtin is None:
-                return None
-            return builtin.options
+            return None if builtin is None else builtin.options
 
         def stylebox_style(style, specs):
             new_style = style.clone()
@@ -1180,10 +1159,7 @@ class _GraphicsElements(object):
             return new_style
 
         def convert(content, style):
-            if content.has_form("List", None):
-                items = content.leaves
-            else:
-                items = [content]
+            items = content.leaves if content.has_form("List", None) else [content]
             style = style.clone()
             for item in items:
                 if item is SymbolNull:
@@ -1194,10 +1170,10 @@ class _GraphicsElements(object):
                 elif head is Symbol("System`StyleBox"):
                     if len(item.leaves) < 1:
                         raise BoxConstructError
-                    for element in convert(
+                    yield from convert(
                         item.leaves[0], stylebox_style(style, item.leaves[1:])
-                    ):
-                        yield element
+                    )
+
                 elif head.name[-3:] == "Box":  # and head[:-3] in element_heads:
                     element_class = get_class(head)
                     options = get_options(head.name[:-3])
@@ -1209,8 +1185,7 @@ class _GraphicsElements(object):
                         element = element_class(self, style, item)
                     yield element
                 elif head is SymbolList:
-                    for element in convert(item, style):
-                        yield element
+                    yield from convert(item, style)
                 else:
                     raise BoxConstructError
 
@@ -1242,31 +1217,26 @@ class GraphicsElements(_GraphicsElements):
         self.content = content
 
     def translate(self, coords):
-        if self.pixel_width is not None:
-            w = self.extent_width if self.extent_width > 0 else 1
-            h = self.extent_height if self.extent_height > 0 else 1
-            result = [
-                (coords[0] - self.xmin) * self.pixel_width / w,
-                (coords[1] - self.ymin) * self.pixel_height / h,
-            ]
-            if self.neg_y:
-                result[1] = self.pixel_height - result[1]
-            return tuple(result)
-        else:
+        if self.pixel_width is None:
             return (coords[0], coords[1])
+        w = self.extent_width if self.extent_width > 0 else 1
+        h = self.extent_height if self.extent_height > 0 else 1
+        result = [
+            (coords[0] - self.xmin) * self.pixel_width / w,
+            (coords[1] - self.ymin) * self.pixel_height / h,
+        ]
+        if self.neg_y:
+            result[1] = self.pixel_height - result[1]
+        return tuple(result)
 
     def translate_absolute(self, d):
         if self.pixel_width is None:
             return (0, 0)
-        else:
-            l = 96.0 / 72
-            return (d[0] * l, (-1 if self.neg_y else 1) * d[1] * l)
+        l = 96.0 / 72
+        return (d[0] * l, (-1 if self.neg_y else 1) * d[1] * l)
 
     def translate_relative(self, x):
-        if self.pixel_width is None:
-            return 0
-        else:
-            return x * self.pixel_width
+        return 0 if self.pixel_width is None else x * self.pixel_width
 
     def extent(self, completely_visible_only=False):
         if completely_visible_only:
@@ -1312,8 +1282,6 @@ class Tiny(Builtin):
         <dd>produces a tiny image.
     </dl>
     """
-
-
 class Small(Builtin):
     """
     <dl>
@@ -1321,8 +1289,6 @@ class Small(Builtin):
         <dd>produces a small image.
     </dl>
     """
-
-
 class Medium(Builtin):
     """
     <dl>
@@ -1330,8 +1296,6 @@ class Medium(Builtin):
         <dd>produces a medium-sized image.
     </dl>
     """
-
-
 class Large(Builtin):
     """
     <dl>
@@ -1339,8 +1303,6 @@ class Large(Builtin):
         <dd>produces a large image.
     </dl>
     """
-
-
 element_heads = frozenset(
     system_symbols(
         "Arrow",
@@ -1415,6 +1377,6 @@ GRAPHICS_SYMBOLS = {
     Symbol("System`Rule"),
     Symbol("System`VertexColors"),
     *element_heads,
-    *[Symbol(element.name + "Box") for element in element_heads],
+    *[Symbol(f"{element.name}Box") for element in element_heads],
     *style_heads,
 }

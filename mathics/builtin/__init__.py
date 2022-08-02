@@ -5,6 +5,7 @@ Mathics Built-in Functions and Variables.
 Mathics has over a thousand Built-in Functions and variables, all of which are defined here.
 """
 
+
 import glob
 import importlib
 import pkgutil
@@ -25,9 +26,10 @@ RUN_SANITY_TEST = False
 # Get a list of files in this directory. We'll exclude from the start
 # files with leading characters we don't want like __init__ with its leading underscore.
 __py_files__ = [
-    osp.basename(f[0:-3])
+    osp.basename(f[:-3])
     for f in glob.glob(osp.join(osp.dirname(__file__), "[a-z]*.py"))
 ]
+
 
 from mathics.builtin.base import (
     Builtin,
@@ -156,7 +158,7 @@ def is_builtin(var):
 
 
 # FIXME: redo using importlib since that is probably less fragile.
-exclude_files = set(("codetables", "base"))
+exclude_files = {"codetables", "base"}
 module_names = [
     f for f in __py_files__ if re.match("^[a-z0-9]+$", f) if f not in exclude_files
 ]

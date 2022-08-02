@@ -54,9 +54,9 @@ def _cie2000_distance(lab1, lab2):
     h2 = (180 * atan2(b2, a2 + e)) / pi % 360
     if abs(h2 - h1) <= 180:
         dh = h2 - h1
-    elif abs(h2 - h1) > 180 and h2 <= h1:
+    elif h2 <= h1:
         dh = h2 - h1 + 360
-    elif abs(h2 - h1) > 180 and h2 > h1:
+    else:
         dh = h2 - h1 - 360
 
     dH = 2 * sqrt(C1 * C2) * sin(radians(dh) / 2)
@@ -105,9 +105,10 @@ def _CMC_distance(lab1, lab2, l, c):
     F = C1 ** 2 / sqrt(C1 ** 4 + 1900)
     T = (
         0.56 + abs(0.2 * cos(radians(h1 + 168)))
-        if (164 <= h1 and h1 <= 345)
+        if 164 <= h1 <= 345
         else 0.36 + abs(0.4 * cos(radians(h1 + 35)))
     )
+
 
     SL = 0.511 if L1 < 16 else (0.040975 * L1) / (1 + 0.01765 * L1)
     SC = (0.0638 * C1) / (1 + 0.0131 * C1) + 0.638
@@ -144,25 +145,24 @@ class _Color(_GraphicsElement):
         super(_Color, self).init(None, item)
         if item is not None:
             leaves = item.leaves
-            if len(leaves) in self.components_sizes:
-                # we must not clip here; we copy the components, without clipping,
-                # e.g. RGBColor[-1, 0, 0] stays RGBColor[-1, 0, 0]. this is especially
-                # important for color spaces like LAB that have negative components.
-                components = [value.round_to_float() for value in leaves]
-                if None in components:
-                    raise ColorError
-
-                # the following lines always extend to the maximum available
-                # default_components, so RGBColor[0, 0, 0] will _always_
-                # become RGBColor[0, 0, 0, 1]. does not seem the right thing
-                # to do in this general context. poke1024
-
-                if len(components) < 3:
-                    components.extend(self.default_components[len(components) :])
-
-                self.components = components
-            else:
+            if len(leaves) not in self.components_sizes:
                 raise ColorError
+            # we must not clip here; we copy the components, without clipping,
+            # e.g. RGBColor[-1, 0, 0] stays RGBColor[-1, 0, 0]. this is especially
+            # important for color spaces like LAB that have negative components.
+            components = [value.round_to_float() for value in leaves]
+            if None in components:
+                raise ColorError
+
+            # the following lines always extend to the maximum available
+            # default_components, so RGBColor[0, 0, 0] will _always_
+            # become RGBColor[0, 0, 0, 1]. does not seem the right thing
+            # to do in this general context. poke1024
+
+            if len(components) < 3:
+                components.extend(self.default_components[len(components) :])
+
+            self.components = components
         elif components is not None:
             self.components = components
 
@@ -199,9 +199,9 @@ class _Color(_GraphicsElement):
         components = convert_color(self.components, self.color_space, color_space)
         if components is None:
             raise ValueError(
-                "cannot convert from color space %s to %s."
-                % (self.color_space, color_space)
+                f"cannot convert from color space {self.color_space} to {color_space}."
             )
+
         return components
 
 
@@ -331,29 +331,35 @@ class ColorDistance(Builtin):
                     compute = ColorDistance._distances.get("CMC")
 
                 elif distance_function.leaves[1].has_form("List", 2):
-                    if isinstance(
-                        distance_function.leaves[1].leaves[0], Integer
-                    ) and isinstance(distance_function.leaves[1].leaves[1], Integer):
-                        if (
-                            distance_function.leaves[1].leaves[0].get_int_value() > 0
-                            and distance_function.leaves[1].leaves[1].get_int_value()
+                    if (
+                        isinstance(distance_function.leaves[1].leaves[0], Integer)
+                        and isinstance(
+                            distance_function.leaves[1].leaves[1], Integer
+                        )
+                        and (
+                            distance_function.leaves[1].leaves[0].get_int_value()
                             > 0
-                        ):
-                            lightness = (
-                                distance_function.leaves[1].leaves[0].get_int_value()
+                            and distance_function.leaves[1]
+                            .leaves[1]
+                            .get_int_value()
+                            > 0
+                        )
+                    ):
+                        lightness = (
+                            distance_function.leaves[1].leaves[0].get_int_value()
+                        )
+                        chroma = (
+                            distance_function.leaves[1].leaves[1].get_int_value()
+                        )
+                        compute = (
+                            lambda c1, c2: _CMC_distance(
+                                100 * c1.to_color_space("LAB")[:3],
+                                100 * c2.to_color_space("LAB")[:3],
+                                lightness,
+                                chroma,
                             )
-                            chroma = (
-                                distance_function.leaves[1].leaves[1].get_int_value()
-                            )
-                            compute = (
-                                lambda c1, c2: _CMC_distance(
-                                    100 * c1.to_color_space("LAB")[:3],
-                                    100 * c2.to_color_space("LAB")[:3],
-                                    lightness,
-                                    chroma,
-                                )
-                                / 100
-                            )
+                            / 100
+                        )
 
         elif (
             isinstance(distance_function, Symbol)
@@ -461,10 +467,7 @@ class Hue(_Color):
 
     def hsl_to_rgba(self):
         h, s, l = self.components[:3]
-        if l < 0.5:
-            q = l * (1 + s)
-        else:
-            q = l + s - l * s
+        q = l * (1 + s) if l < 0.5 else l + s - l * s
         p = 2 * l - q
 
         rgb = (h + 1 / 3, h, h - 1 / 3)
@@ -486,7 +489,7 @@ class Hue(_Color):
             else:
                 return p
 
-        result = tuple([trans(list(map(t))) for t in rgb]) + (self.components[3],)
+        result = tuple(trans(list(map(t))) for t in rgb) + (self.components[3],)
         return result
 
 
@@ -583,6 +586,6 @@ def color_to_expression(components, colorspace):
     elif colorspace == "HSB":
         converted_color_name = "Hue"
     else:
-        converted_color_name = colorspace + "Color"
+        converted_color_name = f"{colorspace}Color"
 
     return Expression(converted_color_name, *components)

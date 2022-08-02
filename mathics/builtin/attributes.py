@@ -262,12 +262,14 @@ class Unprotect(Builtin):
         "Unprotect[symbols___]"
         protected = Symbol("System`Protected")
         items = []
-        if isinstance(symbols, Symbol):
+        if (
+            isinstance(symbols, Symbol)
+            or not isinstance(symbols, Expression)
+            and isinstance(symbols, String)
+        ):
             symbols = [symbols]
         elif isinstance(symbols, Expression):
             symbols = symbols.get_elements()
-        elif isinstance(symbols, String):
-            symbols = [symbols]
         else:
             symbols = symbols.get_sequence()
 

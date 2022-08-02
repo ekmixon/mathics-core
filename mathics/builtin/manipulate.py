@@ -40,7 +40,7 @@ def _interactive(interact_f, kwargs_widgets):
     container.children = [w for w in kwargs_widgets if isinstance(w, DOMWidget)]
 
     def call_f(name=None, old=None, new=None):
-        kwargs = dict((widget._kwarg, widget.value) for widget in kwargs_widgets)
+        kwargs = {widget._kwarg: widget.value for widget in kwargs_widgets}
         try:
             interact_f(**kwargs)
         except Exception as e:
@@ -128,7 +128,7 @@ class _WidgetInstantiator:
             kwargs[strip_context(rule.leaves[0].to_python()).lower()] = rule.leaves[1]
         widget = kwargs["type"].get_string_value()
         del kwargs["type"]
-        getattr(self, "_add_%s_widget" % widget.lower())(**kwargs)  # create the widget
+        getattr(self, f"_add_{widget.lower()}_widget")(**kwargs)
         return True
 
     def get_widgets(self):
@@ -138,9 +138,7 @@ class _WidgetInstantiator:
         parsers = self._parsers
 
         def new_callback(**kwargs):
-            callback(
-                **dict((name, parsers[name](value)) for (name, value) in kwargs.items())
-            )
+            callback(**{name: parsers[name](value) for (name, value) in kwargs.items()})
 
         return new_callback
 
@@ -151,12 +149,11 @@ class _WidgetInstantiator:
         maximum_value = maximum.to_python()
         if minimum_value > maximum_value:
             raise IllegalWidgetArguments(symbol)
-        else:
-            defval = min(max(default.to_python(), minimum_value), maximum_value)
-            widget = _create_widget(
-                FloatSlider, value=defval, min=minimum_value, max=maximum_value
-            )
-            self._add_widget(widget, symbol.get_name(), lambda x: from_python(x), label)
+        defval = min(max(default.to_python(), minimum_value), maximum_value)
+        widget = _create_widget(
+            FloatSlider, value=defval, min=minimum_value, max=maximum_value
+        )
+        self._add_widget(widget, symbol.get_name(), lambda x: from_python(x), label)
 
     def _add_discrete_widget(
         self, symbol, label, default, minimum, maximum, step, evaluation
@@ -170,25 +167,28 @@ class _WidgetInstantiator:
             or step_value > (maximum_value - minimum_value)
         ):
             raise IllegalWidgetArguments(symbol)
-        else:
-            default_value = min(max(default.to_python(), minimum_value), maximum_value)
-            if all(isinstance(x, Integer) for x in [minimum, maximum, default, step]):
-                widget = _create_widget(
-                    IntSlider,
-                    value=default_value,
-                    min=minimum_value,
-                    max=maximum_value,
-                    step=step_value,
-                )
-            else:
-                widget = _create_widget(
-                    FloatSlider,
-                    value=default_value,
-                    min=minimum_value,
-                    max=maximum_value,
-                    step=step_value,
-                )
-            self._add_widget(widget, symbol.get_name(), lambda x: from_python(x), label)
+        default_value = min(max(default.to_python(), minimum_value), maximum_value)
+        widget = (
+            _create_widget(
+                IntSlider,
+                value=default_value,
+                min=minimum_value,
+                max=maximum_value,
+                step=step_value,
+            )
+            if all(
+                isinstance(x, Integer) for x in [minimum, maximum, default, step]
+            )
+            else _create_widget(
+                FloatSlider,
+                value=default_value,
+                min=minimum_value,
+                max=maximum_value,
+                step=step_value,
+            )
+        )
+
+        self._add_widget(widget, symbol.get_name(), lambda x: from_python(x), label)
 
     def _add_options_widget(self, symbol, options, default, label, evaluation):
         formatted_options = []
@@ -221,7 +221,7 @@ class ManipulateOutput(Output):
     def out(self, out):
         return self.output.out(out)
 
-    def clear_output(wait=False):
+    def clear_output(self):
         raise NotImplementedError
 
     def display_data(self, result):

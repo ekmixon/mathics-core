@@ -94,9 +94,11 @@ def _decode_pname(name):
 
 
 def _evaluate_match(s, m, evaluation):
-    replace = dict(
-        (_decode_pname(name), String(value)) for name, value in m.groupdict().items()
-    )
+    replace = {
+        _decode_pname(name): String(value)
+        for name, value in m.groupdict().items()
+    }
+
     return s.replace_vars(replace, in_scoping=False).evaluate(evaluation)
 
 
@@ -230,9 +232,7 @@ def to_regex(
             return "[{0}]".format(re.escape(leaf))
     if expr.has_form("StringExpression", None):
         leaves = [recurse(leaf) for leaf in expr.leaves]
-        if None in leaves:
-            return None
-        return "".join(leaves)
+        return None if None in leaves else "".join(leaves)
     if expr.has_form("Repeated", 1):
         leaf = recurse(expr.leaves[0])
         if leaf is not None:
@@ -259,10 +259,10 @@ def to_regex(
                 evaluation.message(
                     "StringExpression", "cond", expr.leaves[0], expr, expr.leaves[0]
                 )
-            return "(?P=%s)" % _encode_pname(name)
+            return f"(?P={_encode_pname(name)})"
         else:
             groups[name] = expr.leaves[1]
-            return "(?P<%s>%s)" % (_encode_pname(name), recurse(expr.leaves[1]))
+            return f"(?P<{_encode_pname(name)}>{recurse(expr.leaves[1])})"
 
     return None
 
@@ -290,7 +290,7 @@ def mathics_split(patt, string, flags):
     For these reasons we implement our own split.
     """
     # (start, end) indices of splits
-    indices = list((m.start(), m.end()) for m in re.finditer(patt, string, flags))
+    indices = [(m.start(), m.end()) for m in re.finditer(patt, string, flags)]
 
     # (start, end) indices of stuff to keep
     indices = [(None, 0)] + indices + [(len(string), None)]
@@ -552,9 +552,11 @@ class LetterNumber(Builtin):
                     r.append(cp)
                 return Expression(SymbolList, *r)
         elif chars.has_form("List", 1, None):
-            result = []
-            for leaf in chars.leaves:
-                result.append(self.apply_alpha_str(leaf, alpha, evaluation))
+            result = [
+                self.apply_alpha_str(leaf, alpha, evaluation)
+                for leaf in chars.leaves
+            ]
+
             return Expression(SymbolList, *result)
         else:
             return evaluation.message(self.__class__.__name__, "nas", chars)
@@ -563,22 +565,19 @@ class LetterNumber(Builtin):
     def apply(self, chars: List[Any], evaluation):
         "LetterNumber[chars_]"
 
-        start_ord = ord("a") - 1
         if isinstance(chars, String):
             py_chars = chars.get_string_value()
+            start_ord = ord("a") - 1
             if len(py_chars) == 1:
                 # FIXME generalize ord("a")
                 return letter_number([py_chars[0]], start_ord)[0]
-            else:
-                r = [
-                    letter_number(c, start_ord)[0] if c.isalpha() else 0
-                    for c in py_chars
-                ]
-                return Expression(SymbolList, *r)
+            r = [
+                letter_number(c, start_ord)[0] if c.isalpha() else 0
+                for c in py_chars
+            ]
+            return Expression(SymbolList, *r)
         elif chars.has_form("List", 1, None):
-            result = []
-            for leaf in chars.leaves:
-                result.append(self.apply(leaf, evaluation))
+            result = [self.apply(leaf, evaluation) for leaf in chars.leaves]
             return Expression(SymbolList, *result)
         else:
             return evaluation.message(self.__class__.__name__, "nas", chars)
@@ -612,7 +611,7 @@ class _StringFind(Builtin):
         ),
     }
 
-    def _find(py_stri, py_rules, py_n, flags):
+    def _find(self, py_rules, py_n, flags):
         raise NotImplementedError()
 
     def _apply(self, string, rule, n, evaluation, options, cases):
@@ -923,7 +922,7 @@ class ToExpression(Builtin):
 
                 # TODO: turn the below up into a function and call that.
                 s = inp.get_string_value()
-                short_s = s[:15] + "..." if len(s) > 16 else s
+                short_s = f"{s[:15]}..." if len(s) > 16 else s
                 with io.StringIO(s) as f:
                     f.name = """ToExpression['%s']""" % short_s
                     feeder = MathicsFileLineFeeder(f)
@@ -1036,10 +1035,7 @@ class Transliterate(Builtin):
 
 def _pattern_search(name, string, patt, evaluation, options, matched):
     # Get the pattern list and check validity for each
-    if patt.has_form("List", None):
-        patts = patt.get_elements()
-    else:
-        patts = [patt]
+    patts = patt.get_elements() if patt.has_form("List", None) else [patt]
     re_patts = []
     for p in patts:
         py_p = to_regex(p, evaluation)
